@@ -27,13 +27,29 @@ import java.util.Date
 import java.util.Locale
 import com.stb.sirabas.ui.screens.LaporanPenjualanDenganExcel
 
+import com.stb.sirabas.data.remote.ApiClient
+import com.stb.sirabas.data.remote.TokenManager
+import com.stb.sirabas.data.repository.AuthRepository
+import com.stb.sirabas.data.repository.AuthResult
+import com.stb.sirabas.data.repository.PenjualanRepository
+import com.stb.sirabas.data.repository.ProduksiRepository
+import kotlinx.coroutines.launch
+
 private const val PERUSAHAAN = "PT. Sri Tani Berkah"
 
 @Composable
 fun SirabasApp() {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val buildDebug =
         (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+
+    // Network & Repository Instances
+    val tokenManager = remember(context) { TokenManager(context) }
+    val api = remember(tokenManager) { ApiClient.getApi(tokenManager) }
+    val authRepository = remember(api, tokenManager) { AuthRepository(api, tokenManager) }
+    val produksiRepository = remember(api) { ProduksiRepository(api) }
+    val penjualanRepository = remember(api) { PenjualanRepository(api) }
 
     val temaSistemGelap = isSystemInDarkTheme()
 
@@ -137,23 +153,40 @@ fun SirabasApp() {
                         val nama = username.trim()
 
                         when {
-                            buildDebug && nama == "Dedi" &&
-                                    sandi == "Produksi123" -> layar = "produksi"
+                            buildDebug && nama == "Dedi" && sandi == "Produksi123" -> {
+                                masukKeDashboard(nama, "produksi")
+                            }
 
-                            buildDebug && nama == "Rina" &&
-                                    sandi == "Penjualan123" -> layar = "penjualan"
+                            buildDebug && nama == "Rina" && sandi == "Penjualan123" -> {
+                                masukKeDashboard(nama, "penjualan")
+                            }
 
-                            usernamePengajuan.isNotBlank() &&
-                                    nama == usernamePengajuan -> {
+                            usernamePengajuan.isNotBlank() && nama == usernamePengajuan -> {
                                 layar = "menunggu_aktivasi"
                             }
 
-                            !buildDebug -> {
-                                pesan = "Layanan masuk belum tersedia."
-                            }
-
                             else -> {
-                                pesan = "Username atau kata sandi tidak sesuai."
+                                scope.launch {
+                                    when (val res = authRepository.login(nama, sandi)) {
+                                        is AuthResult.Success -> {
+                                            val roleApi = if (res.data.role.equals("produksi", ignoreCase = true)) {
+                                                "produksi"
+                                            } else {
+                                                "penjualan"
+                                            }
+                                            masukKeDashboard(res.data.username, roleApi)
+                                        }
+
+                                        is AuthResult.PendingActivation -> {
+                                            usernamePengajuan = nama
+                                            layar = "menunggu_aktivasi"
+                                        }
+
+                                        is AuthResult.Error -> {
+                                            pesan = res.message
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -162,10 +195,22 @@ fun SirabasApp() {
                 "register" -> RegisterScreen(
                     onMasuk = kembaliKeLogin,
                     onPendaftaranDiajukan = { nama, username, whatsapp ->
-                        namaPengajuan = nama
-                        usernamePengajuan = username.trim()
-                        whatsappPengajuan = whatsapp
-                        layar = "menunggu_aktivasi"
+                        scope.launch {
+                            when (val res = authRepository.register(username, "Password123!", nama, whatsapp, PERUSAHAAN)) {
+                                is AuthResult.Success -> {
+                                    namaPengajuan = nama
+                                    usernamePengajuan = username.trim()
+                                    whatsappPengajuan = whatsapp
+                                    layar = "menunggu_aktivasi"
+                                }
+
+                                is AuthResult.Error -> {
+                                    pesan = res.message
+                                }
+
+                                else -> {}
+                            }
+                        }
                     }
                 )
 
@@ -203,6 +248,7 @@ fun SirabasApp() {
                             },
                             onSimpanProfil = { profilPerRole[role] = it },
                             onKeluar = {
+                                authRepository.logout()
                                 sesiLogin.edit()
                                     .remove("username")
                                     .remove("peran")
