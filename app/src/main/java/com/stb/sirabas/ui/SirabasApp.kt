@@ -1,48 +1,118 @@
 package com.stb.sirabas.ui
 
+import android.content.pm.ApplicationInfo
 import androidx.activity.compose.BackHandler
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
+import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
-import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.platform.LocalContext
 import com.stb.sirabas.R
-import com.stb.sirabas.ui.screens.AlurPenjualanScreen
+import com.stb.sirabas.ui.screens.*
+import com.stb.sirabas.ui.screens.akun.AkunScreen
+import com.stb.sirabas.ui.screens.akun.EditProfilScreen
+import com.stb.sirabas.ui.screens.akun.ProfilAkunUi
+import com.stb.sirabas.ui.screens.akun.TentangAplikasiScreen
 import com.stb.sirabas.ui.screens.auth.LoginScreen
 import com.stb.sirabas.ui.screens.auth.OnboardingScreen
 import com.stb.sirabas.ui.screens.auth.PendingActivationScreen
-import com.stb.sirabas.ui.screens.PenjualanHarianUi
-import com.stb.sirabas.ui.screens.ProdukPenjualanUi
 import com.stb.sirabas.ui.screens.auth.RegisterScreen
 import com.stb.sirabas.ui.screens.auth.SplashScreen
 import com.stb.sirabas.ui.theme.SIRABASTheme
 import kotlinx.coroutines.delay
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
+import com.stb.sirabas.ui.screens.LaporanPenjualanDenganExcel
+
+private const val PERUSAHAAN = "PT. Sri Tani Berkah"
 
 @Composable
 fun SirabasApp() {
-    var layar by rememberSaveable { mutableStateOf("onboarding") }
+    val context = LocalContext.current
+    val buildDebug =
+        (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
+
+    val temaSistemGelap = isSystemInDarkTheme()
+
+    val preferensiTema = remember(context) {
+        context.getSharedPreferences(
+            "pengaturan_tampilan_sirabas",
+            android.content.Context.MODE_PRIVATE
+        )
+    }
+
+    var pilihanModeGelap by remember(preferensiTema) {
+        mutableStateOf<Boolean?>(
+            if (preferensiTema.contains("mode_gelap")) {
+                preferensiTema.getBoolean("mode_gelap", false)
+            } else {
+                null
+            }
+        )
+    }
+
+    val modeGelap = pilihanModeGelap ?: temaSistemGelap
+
+    val konteksSesi = androidx.compose.ui.platform.LocalContext.current.applicationContext
+    val sesiLogin = remember(konteksSesi) {
+        konteksSesi.getSharedPreferences(
+            "sirabas_sesi_login",
+            android.content.Context.MODE_PRIVATE
+        )
+    }
+
+    var layar by rememberSaveable {
+        val usernameTersimpan = sesiLogin.getString("username", "")
+        val peranTersimpan = sesiLogin.getString("peran", "")
+
+        val layarAwal = when {
+            buildDebug && !usernameTersimpan.isNullOrBlank() &&
+                    peranTersimpan == "produksi" -> "produksi"
+
+            buildDebug && !usernameTersimpan.isNullOrBlank() &&
+                    peranTersimpan == "penjualan" -> "penjualan"
+
+            sesiLogin.getBoolean("pernah_masuk", false) -> "login"
+
+            else -> "onboarding"
+        }
+
+        mutableStateOf(layarAwal)
+    }
+
+    fun masukKeDashboard(username: String, peran: String) {
+        sesiLogin.edit()
+            .putString("username", username.trim())
+            .putString("peran", peran)
+            .putBoolean("pernah_masuk", true)
+            .apply()
+
+        layar = peran
+    }
     var tampilkanSplash by rememberSaveable { mutableStateOf(true) }
+    var pesan by rememberSaveable { mutableStateOf<String?>(null) }
 
     var namaPengajuan by rememberSaveable { mutableStateOf("") }
     var usernamePengajuan by rememberSaveable { mutableStateOf("") }
     var whatsappPengajuan by rememberSaveable { mutableStateOf("") }
 
-    LaunchedEffect(Unit) {
+    // Data frontend untuk sesi aplikasi ini.
+    val daftarInvoice = remember { mutableStateListOf<InvoicePenjualanUi>() }
+    val profilPerRole = remember { mutableStateMapOf<String, ProfilAkunUi>() }
+
+    val kembaliKeLogin: () -> Unit = {
+        pesan = null
+        layar = "login"
+    }
+
+    LaunchedEffect(tampilkanSplash) {
         if (tampilkanSplash) {
             delay(3000)
             tampilkanSplash = false
         }
-    }
-
-    val kembaliKeLogin: () -> Unit = {
-        namaPengajuan = ""
-        usernamePengajuan = ""
-        whatsappPengajuan = ""
-        layar = "login"
     }
 
     BackHandler(
@@ -52,65 +122,248 @@ fun SirabasApp() {
         kembaliKeLogin()
     }
 
-    if (tampilkanSplash) {
-        SplashScreen()
-        return
-    }
+    SIRABASTheme(darkTheme = modeGelap, dynamicColor = false) {
+        if (tampilkanSplash) {
+            SplashScreen()
+        } else {
+            when (layar) {
+                "onboarding" -> OnboardingScreen(
+                    onSelesai = { layar = "login" }
+                )
 
-    when (layar) {
-        "onboarding" -> {
-            OnboardingScreen(
-                onSelesai = { layar = "login" }
-            )
-        }
+                "login" -> LoginScreen(
+                    onDaftar = { layar = "register" },
+                    onMasuk = { username, sandi ->
+                        val nama = username.trim()
 
-        "login" -> {
-            LoginScreen(
-                onDaftar = { layar = "register" }
-            )
-        }
+                        when {
+                            buildDebug && nama == "Dedi" &&
+                                    sandi == "Produksi123" -> layar = "produksi"
 
-        "register" -> {
-            RegisterScreen(
-                onMasuk = kembaliKeLogin,
-                onPendaftaranDiajukan = { nama, username, whatsapp ->
-                    namaPengajuan = nama
-                    usernamePengajuan = username
-                    whatsappPengajuan = whatsapp
-                    layar = "menunggu_aktivasi"
+                            buildDebug && nama == "Rina" &&
+                                    sandi == "Penjualan123" -> layar = "penjualan"
+
+                            usernamePengajuan.isNotBlank() &&
+                                    nama == usernamePengajuan -> {
+                                layar = "menunggu_aktivasi"
+                            }
+
+                            !buildDebug -> {
+                                pesan = "Layanan masuk belum tersedia."
+                            }
+
+                            else -> {
+                                pesan = "Username atau kata sandi tidak sesuai."
+                            }
+                        }
+                    }
+                )
+
+                "register" -> RegisterScreen(
+                    onMasuk = kembaliKeLogin,
+                    onPendaftaranDiajukan = { nama, username, whatsapp ->
+                        namaPengajuan = nama
+                        usernamePengajuan = username.trim()
+                        whatsappPengajuan = whatsapp
+                        layar = "menunggu_aktivasi"
+                    }
+                )
+
+                "menunggu_aktivasi" -> PendingActivationScreen(
+                    nama = namaPengajuan,
+                    username = usernamePengajuan,
+                    whatsapp = whatsappPengajuan,
+                    onMasuk = kembaliKeLogin
+                )
+
+                "produksi", "penjualan" -> {
+                    val role = layar
+                    val produksi = role == "produksi"
+                    val namaAwal = if (produksi) "Dedi" else "Rina"
+
+                    val profil = profilPerRole[role] ?: ProfilAkunUi(
+                        namaLengkap = namaAwal,
+                        username = namaAwal,
+                        nomorWhatsApp = "",
+                        role = if (produksi) "Petugas Produksi" else "Petugas Penjualan",
+                        namaPerusahaan = PERUSAHAAN,
+                        alamatPerusahaan = "",
+                        teleponPerusahaan = ""
+                    )
+
+                    val halamanAkun: @Composable () -> Unit = {
+                        MenuAkunSirabas(
+                            profil = profil,
+                            modeGelap = modeGelap,
+                            onModeGelap = { gelap ->
+                                pilihanModeGelap = gelap
+                                preferensiTema.edit()
+                                    .putBoolean("mode_gelap", gelap)
+                                    .apply()
+                            },
+                            onSimpanProfil = { profilPerRole[role] = it },
+                            onKeluar = {
+                                sesiLogin.edit()
+                                    .remove("username")
+                                    .remove("peran")
+                                    .apply()
+
+                                kembaliKeLogin()
+                            }
+                        )
+                    }
+
+                    if (produksi) {
+                        val bahan = remember { contohBahanBaku() }
+                        val tanggal = remember {
+                            SimpleDateFormat(
+                                "dd MMMM yyyy",
+                                Locale.forLanguageTag("id-ID")
+                            ).format(Date())
+                        }
+
+                        ProductionMainScreen(
+                            usernamePanduan = profil.username,
+                            dataBeranda = ProductionHomeUi(
+                                namaPetugas = profil.namaLengkap,
+                                tanggal = tanggal,
+                                penerimaanHariIniKg = 0.0,
+                                jumlahPenerimaan = 0,
+                                stokBahanBakuKg = bahan.sumOf { it.beratKg },
+                                jumlahTugasLabel = 0,
+                                drafPenerimaanKg = 0.0,
+                                pesanan = daftarInvoice.flatMap { invoice ->
+                                    invoice.daftarItem.mapNotNull { item ->
+                                        val produk = item.produk
+
+                                        if (!produk.satuanJual.equals("karung", ignoreCase = true)) {
+                                            return@mapNotNull null
+                                        }
+
+                                        val beratKg = produk.kemasan
+                                            .trim()
+                                            .substringBefore(" ")
+                                            .toIntOrNull()
+                                            ?: return@mapNotNull null
+
+                                        ProductionOrderUi(
+                                            nomorPesanan = invoice.nomor,
+                                            namaPelanggan = invoice.pelanggan,
+                                            namaProduk = produk.nama,
+                                            beratPerKarungKg = beratKg,
+                                            jumlahKarung = item.jumlah,
+                                            kemasan = produk.kemasan,
+                                            tanggalPesanan = invoice.tanggal
+                                        )
+                                    }
+                                }
+                            ),
+                            dataBahanBaku = bahan,
+                            halamanAkun = halamanAkun
+                        )
+                    } else {
+                        DashboardPenjualanSirabas(
+                            profil = profil,
+                            daftarInvoice = daftarInvoice,
+                            onInvoiceBaru = { invoice ->
+                                daftarInvoice.add(0, invoice)
+                            },
+                            onInvoiceDiperbarui = { invoiceBaru ->
+                                val indeks = daftarInvoice.indexOfFirst { it.nomor == invoiceBaru.nomor }
+                                if (indeks >= 0) {
+                                    daftarInvoice[indeks] = invoiceBaru
+                                }
+                            },
+                            halamanAkun = halamanAkun,
+                            onPesan = { pesan = it }
+                        )
+                    }
                 }
-            )
+            }
         }
 
-        "menunggu_aktivasi" -> {
-            PendingActivationScreen(
-                nama = namaPengajuan,
-                username = usernamePengajuan,
-                whatsapp = whatsappPengajuan,
-                onMasuk = kembaliKeLogin
+        pesan?.let { isi ->
+            AlertDialog(
+                onDismissRequest = { pesan = null },
+                title = { Text("Pemberitahuan") },
+                text = { Text(isi) },
+                confirmButton = {
+                    TextButton(onClick = { pesan = null }) {
+                        Text("Tutup")
+                    }
+                }
             )
         }
     }
 }
 
-// Jalankan Preview ini untuk mencoba Tambah → Checkout di HP.
-@Preview(
-    name = "Petugas Penjualan · Beranda dan Checkout",
-    showBackground = true,
-    widthDp = 390,
-    heightDp = 844
-)
 @Composable
-fun AlurPenjualanDiHpPreview() {
-    val hasilProduksi = remember {
+private fun MenuAkunSirabas(
+    profil: ProfilAkunUi,
+    modeGelap: Boolean,
+    onModeGelap: (Boolean) -> Unit,
+    onSimpanProfil: (ProfilAkunUi) -> Unit,
+    onKeluar: () -> Unit
+) {
+    var halaman by rememberSaveable { mutableStateOf("akun") }
+    var bukaBahasa by rememberSaveable { mutableStateOf(false) }
+
+    BackHandler(enabled = halaman != "akun") { halaman = "akun" }
+
+    when (halaman) {
+        "tentang" -> TentangAplikasiScreen(
+            onKembali = { halaman = "akun" }
+        )
+
+        "edit" -> EditProfilScreen(
+            profil = profil,
+            onKembali = { halaman = "akun" },
+            onSimpan = { hasil ->
+                onSimpanProfil(hasil)
+                halaman = "akun"
+            }
+        )
+
+        else -> AkunScreen(
+            profil = profil,
+            bahasa = "Bahasa Indonesia",
+            modeGelap = modeGelap,
+            onEditProfil = { halaman = "edit" },
+            onPilihBahasa = { bukaBahasa = true },
+            onUbahModeGelap = onModeGelap,
+            onTentang = { halaman = "tentang" },
+            onKeluar = onKeluar
+        )
+    }
+
+    if (bukaBahasa) {
+        AlertDialog(
+            onDismissRequest = { bukaBahasa = false },
+            title = { Text("Bahasa aplikasi") },
+            text = { Text("Bahasa Indonesia") },
+            confirmButton = {
+                TextButton(onClick = { bukaBahasa = false }) {
+                    Text("Selesai")
+                }
+            }
+        )
+    }
+}
+
+@Composable
+private fun DashboardPenjualanSirabas(
+    profil: ProfilAkunUi,
+    daftarInvoice: List<InvoicePenjualanUi>,
+    onInvoiceBaru: (InvoicePenjualanUi) -> Unit,
+    onInvoiceDiperbarui: (InvoicePenjualanUi) -> Unit,
+    halamanAkun: @Composable () -> Unit,
+    onPesan: (String) -> Unit
+) {
+    val utama = remember {
         listOf(
             ProdukPenjualanUi(
-                kode = "PREMIUM-25-HIJAU",
-                nama = "Beras Premium",
-                kemasan = "25 kg hijau",
-                satuanJual = "karung",
-                stokTersedia = 12,
-                hargaKatalog = 350_000L,
+                "PREMIUM-25-HIJAU", "Beras Premium", "25 kg hijau",
+                "karung", 12, 350_000L,
                 fotoRes = R.drawable.premium_25kg_hijau
             ),
             ProdukPenjualanUi(
@@ -136,7 +389,7 @@ fun AlurPenjualanDiHpPreview() {
         )
     }
 
-    val hasilSamping = remember {
+    val samping = remember {
         listOf(
             "Dedak Halus", "Dedak Kasar", "Menir",
             "Reject", "Broken", "Sekam"
@@ -152,7 +405,7 @@ fun AlurPenjualanDiHpPreview() {
         }
     }
 
-    val trenHarian = remember {
+    val tren = remember {
         listOf(
             PenjualanHarianUi("5 Nov", 700_000L),
             PenjualanHarianUi("6 Nov", 1_050_000L),
@@ -164,19 +417,36 @@ fun AlurPenjualanDiHpPreview() {
         )
     }
 
-    SIRABASTheme {
-        AlurPenjualanScreen(
-            namaPetugas = "Rina",
-            namaPt = "PT Sri Tani Berkah",
-            alamatPt = "",
-            teleponPt = "",
-            trenHarian = trenHarian,
-            hasilProduksi = hasilProduksi,
-            hasilSamping = hasilSamping,
-            daftarPelanggan = listOf("MBG A", "MBG B"),
-            onKonfirmasiInvoice = { _, _, _, _, _ ->
-                // Penyimpanan invoice akan dihubungkan ke data penjualan.
-            }
-        )
-    }
+    PenjualanMainScreen(
+        usernamePanduan = profil.username,
+        beranda = {
+            AlurPenjualanScreen(
+                namaPetugas = profil.namaLengkap,
+                namaPt = profil.namaPerusahaan,
+                alamatPt = profil.alamatPerusahaan,
+                teleponPt = profil.teleponPerusahaan,
+                trenHarian = tren,
+                hasilProduksi = utama,
+                hasilSamping = samping,
+                daftarPelanggan = listOf("MBG A", "MBG B"),
+                onKonfirmasiInvoice = onInvoiceBaru
+            )
+        },
+        penjualan = {
+            RiwayatPenjualanScreen(
+                daftarInvoice = daftarInvoice,
+                namaPt = profil.namaPerusahaan,
+                alamatPt = profil.alamatPerusahaan,
+                teleponPt = profil.teleponPerusahaan,
+                onInvoiceDiperbarui = onInvoiceDiperbarui
+            )
+        },
+        laporan = {
+            LaporanPenjualanDenganExcel(
+                daftarInvoice = daftarInvoice,
+                onPesan = onPesan
+            )
+        },
+        akun = halamanAkun
+    )
 }

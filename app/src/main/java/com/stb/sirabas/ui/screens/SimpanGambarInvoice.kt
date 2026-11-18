@@ -1,6 +1,6 @@
 package com.stb.sirabas.ui.screens
 
-import android.content.ContentResolver
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -16,6 +16,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
+import com.stb.sirabas.R
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -23,6 +25,7 @@ import java.io.IOException
 import java.math.BigInteger
 import java.text.NumberFormat
 import java.util.Locale
+import kotlin.math.roundToInt
 
 @Composable
 fun rememberSimpanGambarInvoice(
@@ -36,13 +39,13 @@ fun rememberSimpanGambarInvoice(
 
     val pilihLokasi = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.CreateDocument("image/png")
-    ) { tujuan: Uri? ->
+    ) { tujuan ->
         if (tujuan != null) {
             scope.launch {
-                try {
+                val pesan = try {
                     withContext(Dispatchers.IO) {
                         tulisGambarInvoice(
-                            resolver = context.contentResolver,
+                            context = context,
                             tujuan = tujuan,
                             invoice = invoice,
                             namaPt = namaPt,
@@ -50,39 +53,27 @@ fun rememberSimpanGambarInvoice(
                             teleponPt = teleponPt
                         )
                     }
-                    Toast.makeText(
-                        context,
-                        "Gambar invoice tersimpan.",
-                        Toast.LENGTH_SHORT
-                    ).show()
-                } catch (e: IOException) {
-                    Log.e("SIRABAS", "Gagal menulis gambar invoice", e)
-                    Toast.makeText(
-                        context,
-                        "Gagal menyimpan invoice. Coba lokasi lain.",
-                        Toast.LENGTH_LONG
-                    ).show()
-                } catch (e: SecurityException) {
-                    Log.e("SIRABAS", "Lokasi penyimpanan tidak dapat diakses", e)
-                    Toast.makeText(
-                        context,
-                        "Lokasi penyimpanan tidak dapat diakses.",
-                        Toast.LENGTH_LONG
-                    ).show()
+                    "Gambar invoice berhasil disimpan."
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.e("SIRABAS", "Gagal menyimpan PNG invoice", e)
+                    "Gambar invoice gagal disimpan. Coba pilih lokasi lain."
                 }
+
+                Toast.makeText(context, pesan, Toast.LENGTH_LONG).show()
             }
         }
     }
 
     return {
-        // Contoh: INV/2026/001 menjadi INV-2026-001.png.
         val namaFile = invoice.nomor.replace(Regex("[^A-Za-z0-9_-]"), "-")
         pilihLokasi.launch("$namaFile.png")
     }
 }
 
 private fun tulisGambarInvoice(
-    resolver: ContentResolver,
+    context: Context,
     tujuan: Uri,
     invoice: InvoicePenjualanUi,
     namaPt: String,
@@ -92,18 +83,30 @@ private fun tulisGambarInvoice(
     val formatAngka = NumberFormat.getIntegerInstance(
         Locale.forLanguageTag("id-ID")
     )
-    fun rupiah(nilai: BigInteger) = "Rp${formatAngka.format(nilai)}"
+
+    fun rupiah(nilai: BigInteger): String = "Rp${formatAngka.format(nilai)}"
 
     val hijau = Color.rgb(23, 99, 68)
     val tinta = Color.rgb(32, 48, 40)
     val abu = Color.rgb(83, 99, 90)
-    val lebar = 1000
-    val margin = 60
-    val lebarIsi = lebar - (margin * 2)
 
-    // Ukur teks lebih dahulu supaya alamat panjang, nama pelanggan,
-    // dan semua produk tetap masuk ke gambar.
-    val baris = mutableListOf<Pair<StaticLayout, Int>>()
+    val lebarGambar = 1000
+    val margin = 60
+    val lebarTeks = lebarGambar - 2 * margin
+
+    val logo = requireNotNull(context.getDrawable(R.drawable.logo_stb)) {
+        "Logo Sri Tani tidak ditemukan."
+    }.mutate()
+
+    // Pertahankan proporsi asli logo.
+    val lebarAsli = logo.intrinsicWidth.coerceAtLeast(1)
+    val tinggiAsli = logo.intrinsicHeight.coerceAtLeast(1)
+    val skala = 120f / maxOf(lebarAsli, tinggiAsli)
+    val lebarLogo = (lebarAsli * skala).roundToInt().coerceAtLeast(1)
+    val tinggiLogo = (tinggiAsli * skala).roundToInt().coerceAtLeast(1)
+
+    // Ukur semua teks sebelum membuat PNG agar baris terakhir tidak terpotong.
+    val daftarBaris = mutableListOf<Pair<StaticLayout, Int>>()
 
     fun tambahTeks(
         teks: String,
@@ -118,17 +121,20 @@ private fun tulisGambarInvoice(
             typeface = if (tebal) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
         }
 
-        val tataLetak = StaticLayout.Builder
-            .obtain(teks, 0, teks.length, pena, lebarIsi)
+        val layout = StaticLayout.Builder
+            .obtain(teks, 0, teks.length, pena, lebarTeks)
             .setAlignment(Layout.Alignment.ALIGN_NORMAL)
             .setIncludePad(false)
             .build()
 
-        baris.add(tataLetak to jarakBawah)
+        daftarBaris.add(layout to jarakBawah)
     }
 
     tambahTeks(namaPt, ukuran = 40f, warna = hijau, tebal = true)
-    if (alamatPt.isNotBlank()) tambahTeks(alamatPt, ukuran = 25f, warna = abu)
+
+    if (alamatPt.isNotBlank()) {
+        tambahTeks(alamatPt, ukuran = 25f, warna = abu)
+    }
     if (teleponPt.isNotBlank()) {
         tambahTeks("Telp. $teleponPt", ukuran = 25f, warna = abu)
     }
@@ -137,7 +143,6 @@ private fun tulisGambarInvoice(
     tambahTeks(invoice.nomor, warna = hijau, tebal = true)
     tambahTeks("Tanggal pesanan: ${invoice.tanggal}")
     tambahTeks("Pelanggan: ${invoice.pelanggan}", jarakBawah = 32)
-
     tambahTeks("Rincian pesanan", ukuran = 32f, tebal = true)
 
     invoice.daftarItem.forEach { item ->
@@ -146,12 +151,13 @@ private fun tulisGambarInvoice(
         val subtotal = harga * item.jumlah.toBigInteger()
 
         tambahTeks(
-            "${produk.nama} · ${produk.kemasan}",
+            teks = "${produk.nama} · ${produk.kemasan}",
             tebal = true,
             jarakBawah = 6
         )
         tambahTeks(
-            "${item.jumlah} ${produk.satuanJual} × ${rupiah(harga)} = ${rupiah(subtotal)}",
+            teks = "${item.jumlah} ${produk.satuanJual} × " +
+                    "${rupiah(harga)} = ${rupiah(subtotal)}",
             ukuran = 27f,
             warna = abu,
             jarakBawah = 22
@@ -159,7 +165,7 @@ private fun tulisGambarInvoice(
     }
 
     tambahTeks(
-        "Total invoice: ${rupiah(invoice.total)}",
+        teks = "Total invoice: ${rupiah(invoice.total)}",
         ukuran = 36f,
         warna = hijau,
         tebal = true
@@ -167,7 +173,7 @@ private fun tulisGambarInvoice(
     tambahTeks("Sudah dibayar: ${rupiah(invoice.jumlahDibayar.toBigInteger())}")
     tambahTeks("Status: ${if (invoice.lunas) "Lunas" else "Piutang"}")
 
-    if (invoice.jumlahDibayar > 0 && !invoice.metodePembayaran.isNullOrBlank()) {
+    if (invoice.jumlahDibayar > 0L && !invoice.metodePembayaran.isNullOrBlank()) {
         tambahTeks("Metode pembayaran terakhir: ${invoice.metodePembayaran}")
     }
 
@@ -175,18 +181,26 @@ private fun tulisGambarInvoice(
         tambahTeks("Sisa piutang: ${rupiah(invoice.sisaPiutang)}", tebal = true)
     }
 
-    val tinggi = margin * 2 + baris.sumOf { (layout, jarak) ->
+    val awalTeks = margin + tinggiLogo + 16
+    val tinggiGambar = awalTeks + margin + daftarBaris.sumOf { (layout, jarak) ->
         layout.height + jarak
     }
 
-    val bitmap = Bitmap.createBitmap(lebar, tinggi, Bitmap.Config.ARGB_8888)
+    val bitmap = Bitmap.createBitmap(
+        lebarGambar,
+        tinggiGambar,
+        Bitmap.Config.ARGB_8888
+    )
 
     try {
         val kanvas = Canvas(bitmap)
         kanvas.drawColor(Color.WHITE)
-        var posisiY = margin
 
-        for ((layout, jarak) in baris) {
+        logo.setBounds(margin, margin, margin + lebarLogo, margin + tinggiLogo)
+        logo.draw(kanvas)
+
+        var posisiY = awalTeks
+        for ((layout, jarak) in daftarBaris) {
             kanvas.save()
             kanvas.translate(margin.toFloat(), posisiY.toFloat())
             layout.draw(kanvas)
@@ -194,7 +208,7 @@ private fun tulisGambarInvoice(
             posisiY += layout.height + jarak
         }
 
-        val output = resolver.openOutputStream(tujuan, "wt")
+        val output = context.contentResolver.openOutputStream(tujuan, "wt")
             ?: throw IOException("File tujuan tidak dapat dibuka.")
 
         output.use { stream ->

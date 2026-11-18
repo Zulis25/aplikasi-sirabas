@@ -1,12 +1,15 @@
 package com.stb.sirabas.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -33,6 +36,20 @@ data class ItemPesananUi(
     val hargaSatuan: Long
 )
 
+private const val SEMUA = "Semua"
+private const val PRODUKSI = "Hasil produksi"
+private const val SAMPING = "Hasil samping"
+
+private fun fotoProdukBeranda(kode: String): Int? = when (kode) {
+    "PREMIUM-5" -> R.drawable.premium_5kg
+    "PREMIUM-10" -> R.drawable.premium_10kg
+    "PREMIUM-25-HIJAU" -> R.drawable.premium_25kg_hijau
+    "PREMIUM-25-BIRU" -> R.drawable.premium_25kg_biru
+    "MEDIUM-25" -> R.drawable.medium_25kg
+    "BERAS-50" -> R.drawable.beras_50kg
+    else -> null
+}
+
 @Composable
 fun BerandaPenjualanScreen(
     namaPetugas: String,
@@ -43,96 +60,137 @@ fun BerandaPenjualanScreen(
     onTambah: (ProdukPenjualanUi, Int, Long) -> Unit,
     onCheckout: () -> Unit
 ) {
+    var kategori by rememberSaveable { mutableStateOf(SEMUA) }
+    val warna = MaterialTheme.colorScheme
     val formatAngka = remember {
         NumberFormat.getIntegerInstance(Locale.forLanguageTag("id-ID"))
     }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(AccessColors.Background)
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = warna.background,
+        contentColor = warna.onBackground
     ) {
-        LazyColumn(
-            modifier = Modifier.weight(1f),
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(
-                        text = "Beranda Penjualan",
-                        color = AccessColors.Ink,
-                        fontSize = 27.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "Selamat datang, $namaPetugas",
-                        color = AccessColors.Muted
-                    )
+        Column {
+            LazyColumn(
+                modifier = Modifier.fillMaxWidth().weight(1f),
+                contentPadding = PaddingValues(16.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                item {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(
+                            text = "Beranda Penjualan",
+                            fontSize = 27.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = "Selamat datang, $namaPetugas",
+                            color = warna.onSurfaceVariant
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        HorizontalDivider(color = warna.outlineVariant)
+                    }
+                }
+
+                item {
+                    GrafikHarianPenjualan(trenHarian, formatAngka)
+                }
+
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        listOf(SEMUA, PRODUKSI, SAMPING).forEach { pilihan ->
+                            FilterChip(
+                                selected = kategori == pilihan,
+                                onClick = { kategori = pilihan },
+                                label = { Text(pilihan) }
+                            )
+                        }
+                    }
+                }
+
+                val kelompok = listOf(
+                    PRODUKSI to hasilProduksi,
+                    SAMPING to hasilSamping
+                )
+
+                kelompok.forEach { (judul, produkDalamKelompok) ->
+                    if (kategori == SEMUA || kategori == judul) {
+                        item(key = "judul-$judul") {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = judul,
+                                    modifier = Modifier.weight(1f),
+                                    fontSize = 20.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "${produkDalamKelompok.size} produk",
+                                    color = warna.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        if (produkDalamKelompok.isEmpty()) {
+                            item(key = "kosong-$judul") {
+                                Text(
+                                    text = "Belum ada produk dalam kategori ini.",
+                                    color = warna.onSurfaceVariant
+                                )
+                            }
+                        }
+
+                        items(
+                            items = produkDalamKelompok,
+                            key = { produk -> "$judul-${produk.kode}" }
+                        ) { produk ->
+                            KartuProdukKatalog(produk, keranjang, onTambah)
+                        }
+                    }
                 }
             }
 
-            item {
-                GrafikHarianPenjualan(trenHarian)
-            }
+            if (keranjang.isNotEmpty()) {
+                val total = keranjang.fold(BigDecimal.ZERO) { subtotal, item ->
+                    subtotal + item.hargaSatuan.toBigDecimal() *
+                            item.jumlah.toBigDecimal()
+                }
+                val jumlahJenis = keranjang.distinctBy { it.produk.kode }.size
 
-            item {
-                JudulKatalogPenjualan("Hasil produksi", hasilProduksi.size)
-            }
-
-            items(hasilProduksi, key = { it.kode }) { produk ->
-                KartuProdukKatalog(produk, keranjang, onTambah)
-            }
-
-            item {
-                JudulKatalogPenjualan("Hasil samping", hasilSamping.size)
-            }
-
-            items(hasilSamping, key = { it.kode }) { produk ->
-                KartuProdukKatalog(produk, keranjang, onTambah)
-            }
-        }
-
-        // Ringkasan pesanan tetap terlihat saat katalog digulir.
-        if (keranjang.isNotEmpty()) {
-            val total = keranjang.fold(BigDecimal.ZERO) { jumlah, item ->
-                jumlah + item.hargaSatuan.toBigDecimal() * item.jumlah.toBigDecimal()
-            }
-            val jumlahJenis = keranjang.distinctBy { it.produk.kode }.size
-
-            Surface(
-                color = Color.White,
-                shadowElevation = 4.dp
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(16.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                Surface(
+                    color = warna.surface,
+                    contentColor = warna.onSurface,
+                    shadowElevation = 4.dp
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "$jumlahJenis jenis produk",
-                            color = AccessColors.Muted,
-                            fontSize = 13.sp
-                        )
-                        Text(
-                            text = "Rp${formatAngka.format(total)}",
-                            color = AccessColors.Ink,
-                            fontWeight = FontWeight.Bold,
-                            fontSize = 19.sp
-                        )
-                    }
-
-                    Button(
-                        onClick = onCheckout,
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = AccessColors.Green,
-                            contentColor = Color.White
-                        )
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
-                        Text("Checkout")
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "$jumlahJenis jenis produk",
+                                color = warna.onSurfaceVariant,
+                                fontSize = 13.sp
+                            )
+                            Text(
+                                text = "Rp${formatAngka.format(total)}",
+                                fontSize = 19.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        Button(onClick = onCheckout) {
+                            Text("Checkout")
+                        }
                     }
                 }
             }
@@ -146,56 +204,42 @@ private fun KartuProdukKatalog(
     keranjang: List<ItemPesananUi>,
     onTambah: (ProdukPenjualanUi, Int, Long) -> Unit
 ) {
-    val sudahDipesan = keranjang
+    val jumlahDiKeranjang = keranjang
         .filter { it.produk.kode == produk.kode }
         .sumOf { it.jumlah }
 
-    val sisaUntukDipesan = (produk.stokTersedia - sudahDipesan).coerceAtLeast(0)
+    val sisa = (produk.stokTersedia - jumlahDiKeranjang).coerceAtLeast(0)
+    val produkDenganFoto = produk.copy(
+        fotoRes = if (produk.kode.startsWith("SAMPING-")) {
+            R.drawable.beras_50kg
+        } else {
+            produk.fotoRes ?: fotoProdukBeranda(produk.kode)
+        }
+    )
 
     KartuProdukPenjualan(
-        produk = produk.copy(stokTersedia = sisaUntukDipesan),
+        produk = produkDenganFoto.copy(stokTersedia = sisa),
         onTambah = { _, jumlah, harga ->
-            if (jumlah in 1..sisaUntukDipesan && harga > 0L) {
-                onTambah(produk, jumlah, harga)
+            if (jumlah in 1..sisa && harga > 0L) {
+                onTambah(produkDenganFoto, jumlah, harga)
             }
         }
     )
 }
 
 @Composable
-private fun JudulKatalogPenjualan(judul: String, jumlah: Int) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(top = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(
-            text = judul,
-            color = AccessColors.Ink,
-            fontSize = 20.sp,
-            fontWeight = FontWeight.Bold
-        )
-        Text(
-            text = "$jumlah produk",
-            color = AccessColors.Muted,
-            fontSize = 13.sp
-        )
-    }
-}
-
-@Composable
-private fun GrafikHarianPenjualan(data: List<PenjualanHarianUi>) {
+private fun GrafikHarianPenjualan(
+    data: List<PenjualanHarianUi>,
+    formatAngka: NumberFormat
+) {
     val harian = data.takeLast(7)
-    val tertinggi = harian.maxOfOrNull { it.totalRupiah }?.coerceAtLeast(1L) ?: 1L
-    val formatAngka = remember {
-        NumberFormat.getIntegerInstance(Locale.forLanguageTag("id-ID"))
-    }
+    val tertinggi = (harian.maxOfOrNull { it.totalRupiah } ?: 0L)
+        .coerceAtLeast(1L)
 
     Surface(
         modifier = Modifier.fillMaxWidth(),
         color = Color(0xFF123F2E),
+        contentColor = Color.White,
         shape = RoundedCornerShape(18.dp)
     ) {
         Column(
@@ -204,20 +248,17 @@ private fun GrafikHarianPenjualan(data: List<PenjualanHarianUi>) {
         ) {
             Text(
                 text = "Tren penjualan harian",
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
-                fontSize = 18.sp
+                fontSize = 18.sp,
+                fontWeight = FontWeight.Bold
             )
 
-            if (harian.isEmpty()) {
-                Text("Belum ada data penjualan.", color = Color.White)
+            val terakhir = harian.lastOrNull()
+            if (terakhir == null) {
+                Text("Belum ada data penjualan.")
             } else {
-                val hariTerakhir = harian.last()
-
                 Text(
-                    text = "${hariTerakhir.tanggal} · Rp${formatAngka.format(hariTerakhir.totalRupiah)}",
-                    color = Color(0xFFE3CB91),
-                    fontSize = 14.sp
+                    text = "${terakhir.tanggal} · Rp${formatAngka.format(terakhir.totalRupiah)}",
+                    color = Color(0xFFE3CB91)
                 )
 
                 Row(
@@ -231,12 +272,10 @@ private fun GrafikHarianPenjualan(data: List<PenjualanHarianUi>) {
                             .toFloat()
 
                         Column(
-                            modifier = Modifier
-                                .weight(1f)
-                                .semantics {
-                                    contentDescription =
-                                        "${hari.tanggal}, Rp${formatAngka.format(hari.totalRupiah)}"
-                                },
+                            modifier = Modifier.weight(1f).semantics {
+                                contentDescription =
+                                    "${hari.tanggal}, Rp${formatAngka.format(hari.totalRupiah)}"
+                            },
                             horizontalAlignment = Alignment.CenterHorizontally,
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
@@ -249,8 +288,8 @@ private fun GrafikHarianPenjualan(data: List<PenjualanHarianUi>) {
                                         .width(18.dp)
                                         .height(64.dp * proporsi)
                                         .background(
-                                            color = Color(0xFFA8D5AC),
-                                            shape = RoundedCornerShape(
+                                            Color(0xFFA8D5AC),
+                                            RoundedCornerShape(
                                                 topStart = 4.dp,
                                                 topEnd = 4.dp
                                             )
@@ -260,7 +299,6 @@ private fun GrafikHarianPenjualan(data: List<PenjualanHarianUi>) {
 
                             Text(
                                 text = hari.tanggal.substringBefore(" "),
-                                color = Color.White,
                                 fontSize = 12.sp
                             )
                         }
@@ -271,131 +309,31 @@ private fun GrafikHarianPenjualan(data: List<PenjualanHarianUi>) {
     }
 }
 
-@Preview(
-    name = "Penjualan · Beranda dan checkout",
-    showBackground = true,
-    widthDp = 390,
-    heightDp = 900
-)
+@Preview(showBackground = true, widthDp = 390, heightDp = 844)
 @Composable
 private fun BerandaPenjualanPreview() {
-    val utama = listOf(
-        ProdukPenjualanUi(
-            kode = "PREMIUM-25-HIJAU",
-            nama = "Beras Premium",
-            kemasan = "25 kg hijau",
-            satuanJual = "karung",
-            stokTersedia = 12,
-            hargaKatalog = 350_000L,
-            fotoRes = R.drawable.premium_25kg_hijau
-        ),
-        ProdukPenjualanUi(
-            "PREMIUM-5", "Beras Premium", "5 kg", "karung", 20, 75_000L
-        ),
-        ProdukPenjualanUi(
-            "PREMIUM-10", "Beras Premium", "10 kg", "karung", 15, 145_000L
-        ),
-        ProdukPenjualanUi(
-            "PREMIUM-25-BIRU", "Beras Premium", "25 kg biru muda", "karung", 8, 350_000L
-        ),
-        ProdukPenjualanUi(
-            "MEDIUM-25", "Beras Medium", "25 kg", "karung", 10, 310_000L
-        ),
-        ProdukPenjualanUi(
-            "BERAS-50", "Beras", "50 kg", "karung", 5, 600_000L
-        )
-    )
-
-    val samping = listOf(
-        "Dedak Halus", "Dedak Kasar", "Menir", "Reject", "Broken", "Sekam"
-    ).map { nama ->
-        ProdukPenjualanUi(
-            kode = "SAMPING-${nama.uppercase(Locale.ROOT).replace(' ', '-')}",
-            nama = nama,
-            kemasan = "Curah",
-            satuanJual = "kg",
-            stokTersedia = 50,
-            hargaKatalog = 3_000L
-        )
-    }
-
-    val tren = listOf(
-        PenjualanHarianUi("5 Nov", 700_000),
-        PenjualanHarianUi("6 Nov", 1_050_000),
-        PenjualanHarianUi("7 Nov", 850_000),
-        PenjualanHarianUi("8 Nov", 1_400_000),
-        PenjualanHarianUi("9 Nov", 1_100_000),
-        PenjualanHarianUi("10 Nov", 1_750_000),
-        PenjualanHarianUi("11 Nov", 1_400_000)
-    )
-
-    // Dua karung khusus Preview agar Checkout langsung terlihat.
-    val keranjang = remember {
-        mutableStateListOf(
-            ItemPesananUi(
-                produk = utama.first(),
-                jumlah = 2,
-                hargaSatuan = utama.first().hargaKatalog
-            )
-        )
-    }
-    var tampilInvoice by remember { mutableStateOf(false) }
-
     SIRABASTheme {
         BerandaPenjualanScreen(
             namaPetugas = "Rina",
-            trenHarian = tren,
-            hasilProduksi = utama,
-            hasilSamping = samping,
-            keranjang = keranjang.toList(),
-            onTambah = { produk, jumlah, harga ->
-                val jumlahDiKeranjang = keranjang
-                    .filter { it.produk.kode == produk.kode }
-                    .sumOf { it.jumlah }
-
-                val sisaStok = produk.stokTersedia - jumlahDiKeranjang
-
-                if (jumlah in 1..sisaStok && harga > 0L) {
-                    val indeks = keranjang.indexOfFirst {
-                        it.produk.kode == produk.kode && it.hargaSatuan == harga
-                    }
-
-                    if (indeks >= 0) {
-                        val itemLama = keranjang[indeks]
-                        keranjang[indeks] = itemLama.copy(
-                            jumlah = itemLama.jumlah + jumlah
-                        )
-                    } else {
-                        keranjang.add(
-                            ItemPesananUi(
-                                produk = produk,
-                                jumlah = jumlah,
-                                hargaSatuan = harga
-                            )
-                        )
-                    }
-                }
-            },
-            onCheckout = {
-                tampilInvoice = keranjang.isNotEmpty()
-            }
+            trenHarian = listOf(
+                PenjualanHarianUi("10 Nov", 750_000L),
+                PenjualanHarianUi("11 Nov", 950_000L)
+            ),
+            hasilProduksi = listOf(
+                ProdukPenjualanUi(
+                    "PREMIUM-5", "Beras Premium", "5 kg",
+                    "karung", 20, 75_000L
+                )
+            ),
+            hasilSamping = listOf(
+                ProdukPenjualanUi(
+                    "SAMPING-REJECT", "Reject", "Curah",
+                    "kg", 50, 3_000L
+                )
+            ),
+            keranjang = emptyList(),
+            onTambah = { _, _, _ -> },
+            onCheckout = {}
         )
-
-        if (tampilInvoice) {
-            CheckoutInvoiceDialog(
-                namaPt = "PT Sri Tani Berkah",
-                alamatPt = "",
-                teleponPt = "",
-                tanggalPesanan = "11 November 2026",
-                keranjang = keranjang.toList(),
-                daftarPelanggan = listOf("MBG A", "MBG B"),
-                onTutup = {
-                    tampilInvoice = false
-                },
-                onKonfirmasi = { _, _, _, _ ->
-                    tampilInvoice = false
-                }
-            )
-        }
     }
 }

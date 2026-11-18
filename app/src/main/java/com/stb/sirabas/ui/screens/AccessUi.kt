@@ -18,15 +18,40 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.stb.sirabas.R
 
+// Warna dibaca dari tema yang sedang aktif.
 internal object AccessColors {
-    val Background = Color(0xFFF7F7F0)
-    val Green = Color(0xFF236547)
-    val Ink = Color(0xFF183B30)
-    val Muted = Color(0xFF627369)
-    val Border = Color(0xFFE1E6DB)
-    val SoftGreen = Color(0xFFEAF4EE)
-    val SoftGold = Color(0xFFFFF2D9)
-    val GoldInk = Color(0xFF805B15)
+
+    val Background: Color
+        @Composable
+        get() = MaterialTheme.colorScheme.background
+
+    val Green: Color
+        @Composable
+        get() = MaterialTheme.colorScheme.primary
+
+    val Ink: Color
+        @Composable
+        get() = MaterialTheme.colorScheme.onSurface
+
+    val Muted: Color
+        @Composable
+        get() = MaterialTheme.colorScheme.onSurfaceVariant
+
+    val Border: Color
+        @Composable
+        get() = MaterialTheme.colorScheme.outlineVariant
+
+    val SoftGreen: Color
+        @Composable
+        get() = MaterialTheme.colorScheme.secondaryContainer
+
+    val SoftGold: Color
+        @Composable
+        get() = MaterialTheme.colorScheme.tertiaryContainer
+
+    val GoldInk: Color
+        @Composable
+        get() = MaterialTheme.colorScheme.onTertiaryContainer
 }
 
 @Composable
@@ -35,61 +60,71 @@ internal fun AccessPage(
     onBack: () -> Unit,
     content: @Composable ColumnScope.() -> Unit
 ) {
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(AccessColors.Background)
-            .safeDrawingPadding()
-            .imePadding(),
-        contentAlignment = Alignment.TopCenter
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = AccessColors.Background,
+        contentColor = AccessColors.Ink
     ) {
-        Column(
+        Box(
             modifier = Modifier
-                .widthIn(max = 520.dp)
-                .fillMaxWidth()
-                .verticalScroll(rememberScrollState())
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+                .fillMaxSize()
+                .safeDrawingPadding()
+                .imePadding(),
+            contentAlignment = Alignment.TopCenter
         ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically
+            Column(
+                modifier = Modifier
+                    .widthIn(max = 520.dp)
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
-                IconButton(onClick = onBack) {
-                    Icon(
-                        painter = painterResource(
-                            R.drawable.sirabas_arrow_left
-                        ),
-                        contentDescription = "Kembali ke login",
-                        tint = AccessColors.Green
+                Row(
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            painter = painterResource(
+                                R.drawable.sirabas_arrow_left
+                            ),
+                            contentDescription = "Kembali",
+                            tint = AccessColors.Green
+                        )
+                    }
+
+                    Text(
+                        text = title,
+                        fontSize = 25.sp,
+                        color = AccessColors.Ink,
+                        fontWeight = FontWeight.Bold
                     )
                 }
 
-                Text(
-                    text = title,
-                    fontSize = 25.sp,
-                    color = AccessColors.Ink
+                HorizontalDivider(
+                    color = AccessColors.Border
                 )
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Image(
+                        painter = painterResource(R.drawable.logo_stb),
+                        contentDescription = "Logo PT Sri Tani Berkah",
+                        modifier = Modifier.size(40.dp)
+                    )
+
+                    Text(
+                        text = "SIRABAS",
+                        fontSize = 22.sp,
+                        color = AccessColors.Ink,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+
+                content()
             }
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Image(
-                    painter = painterResource(R.drawable.logo_stb),
-                    contentDescription = "Logo PT Sri Tani Berkah",
-                    modifier = Modifier.size(40.dp)
-                )
-
-                Text(
-                    text = "SIRABAS",
-                    fontSize = 22.sp,
-                    color = AccessColors.Ink,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-
-            content()
         }
     }
 }
@@ -100,35 +135,36 @@ internal fun AccessNotice(
     message: String,
     gold: Boolean = false
 ) {
+    val latar = if (gold) {
+        AccessColors.SoftGold
+    } else {
+        AccessColors.SoftGreen
+    }
+
+    val warnaTeks = if (gold) {
+        AccessColors.GoldInk
+    } else {
+        MaterialTheme.colorScheme.onSecondaryContainer
+    }
+
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
-        color = if (gold) {
-            AccessColors.SoftGold
-        } else {
-            AccessColors.SoftGreen
-        }
+        color = latar,
+        contentColor = warnaTeks
     ) {
         Column(
             modifier = Modifier.padding(14.dp),
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            val ink = if (gold) {
-                AccessColors.GoldInk
-            } else {
-                AccessColors.Ink
-            }
-
             Text(
                 text = title,
-                color = ink,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.SemiBold
             )
 
             Text(
                 text = message,
-                color = ink,
                 fontSize = 13.sp,
                 lineHeight = 20.sp
             )
@@ -142,7 +178,8 @@ internal fun AccessCard(
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = Color.White,
+        color = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface,
         shape = RoundedCornerShape(18.dp),
         border = BorderStroke(
             width = 1.dp,

@@ -188,14 +188,32 @@ private fun IsiCheckoutInvoice(
         mutableStateOf(ArrayList(keranjang.map { it.hargaSatuan.toString() }))
     }
 
-    val hargaValid = hargaInput.map { it.toLongOrNull() }
-    val totalValid = keranjang.isNotEmpty() &&
-            keranjang.all { it.jumlah > 0 } &&
-            hargaValid.all { it != null && it > 0L }
+    var jumlahInput by rememberSaveable(keranjang) {
+        mutableStateOf(ArrayList(keranjang.map { it.jumlah }))
+    }
 
-    val total = keranjang.foldIndexed(BigInteger.ZERO) { index, jumlah, item ->
-        jumlah + (hargaValid[index] ?: 0L).toBigInteger() *
-                item.jumlah.toBigInteger()
+    val hargaValid = hargaInput.map { it.toLongOrNull() }
+
+    val jumlahPerProduk = keranjang.indices
+        .groupBy { index -> keranjang[index].produk.kode }
+        .mapValues { (_, indeksBaris) ->
+            indeksBaris.sumOf { index -> jumlahInput[index].toLong() }
+        }
+
+    val totalValid = jumlahInput.any { it > 0 } &&
+            keranjang.indices.all { index ->
+                val produk = keranjang[index].produk
+                val jumlah = jumlahInput[index]
+                val totalProduk = jumlahPerProduk.getValue(produk.kode)
+
+                jumlah >= 0 &&
+                        totalProduk <= produk.stokTersedia.toLong() &&
+                        (jumlah == 0 || (hargaValid[index] ?: 0L) > 0L)
+            }
+
+    val total = keranjang.indices.fold(BigInteger.ZERO) { subtotal, index ->
+        val harga = (hargaValid[index] ?: 0L).toBigInteger()
+        subtotal + harga * jumlahInput[index].toBigInteger()
     }
 
     val transferDipilih = status == "Lunas" && metode == "Transfer Bank"
@@ -278,7 +296,54 @@ private fun IsiCheckoutInvoice(
                             "${produk.nama} · ${produk.kemasan}",
                             fontWeight = FontWeight.SemiBold
                         )
-                        Text("${item.jumlah} ${produk.satuanJual}")
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                        ) {
+                            OutlinedButton(
+                                enabled = jumlahInput[index] > 0,
+                                onClick = {
+                                    jumlahInput = ArrayList(jumlahInput).apply {
+                                        this[index] = (this[index] - 1).coerceAtLeast(0)
+                                    }
+                                }
+                            ) {
+                                Text("−")
+                            }
+
+                            Text(
+                                text = "${jumlahInput[index]} ${produk.satuanJual}",
+                                modifier = Modifier.weight(1f),
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                fontWeight = FontWeight.SemiBold
+                            )
+
+                            OutlinedButton(
+                                enabled = jumlahPerProduk.getValue(produk.kode) <
+                                        produk.stokTersedia.toLong(),
+                                onClick = {
+                                    val totalSaatIni = keranjang.indices
+                                        .filter { keranjang[it].produk.kode == produk.kode }
+                                        .sumOf { jumlahInput[it].toLong() }
+
+                                    if (totalSaatIni < produk.stokTersedia.toLong()) {
+                                        jumlahInput = ArrayList(jumlahInput).apply {
+                                            this[index] = this[index] + 1
+                                        }
+                                    }
+                                }
+                            ) {
+                                Text("+")
+                            }
+                        }
+
+                        if (jumlahInput[index] == 0) {
+                            Text(
+                                text = "Produk ini tidak akan masuk invoice.",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
 
                         OutlinedTextField(
                             value = hargaInput[index],
@@ -365,10 +430,18 @@ private fun IsiCheckoutInvoice(
 
             Button(
                 onClick = {
-                    val itemFinal = keranjang.mapIndexed { index, item ->
-                        item.copy(hargaSatuan = hargaInput[index].toLong())
-                    }
+                    val itemFinal = keranjang.mapIndexedNotNull { index, item ->
+                        val jumlahAkhir = jumlahInput[index]
 
+                        if (jumlahAkhir == 0) {
+                            null
+                        } else {
+                            item.copy(
+                                jumlah = jumlahAkhir,
+                                hargaSatuan = hargaInput[index].toLong()
+                            )
+                        }
+                    }
                     onKonfirmasi(
                         pelanggan.trim(),
                         itemFinal,

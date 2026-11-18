@@ -30,7 +30,17 @@ fun AlurPersiapanPesananScreen(
         NotifikasiPesananProduksiScreen(
             daftarPesanan = daftarPesanan,
             onBukaPersiapan = { pesanan ->
-                nomorTerpilih = pesanan.nomorPesanan
+                val siapDikirim = pesanan.daftarItem.isNotEmpty() &&
+                        pesanan.daftarItem.all { item ->
+                            item.jumlahPesanan > 0 &&
+                                    item.jumlahDipindai == item.jumlahPesanan
+                        }
+
+                if (siapDikirim) {
+                    onPeriksaPengiriman(pesanan)
+                } else {
+                    nomorTerpilih = pesanan.nomorPesanan
+                }
             }
         )
     } else {

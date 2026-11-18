@@ -3,7 +3,6 @@ package com.stb.sirabas.ui.screens
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -43,269 +42,345 @@ data class ProductionOrderUi(
     val namaPelanggan: String,
     val namaProduk: String,
     val beratPerKarungKg: Int,
-    val jumlahKarung: Int
+    val jumlahKarung: Int,
+    val kemasan: String = "$beratPerKarungKg kg",
+    val tanggalPesanan: String = ""
 )
 
 @Composable
 fun ProductionHomeScreen(
-    data: ProductionHomeUi? = null
+    data: ProductionHomeUi? = null,
+    batchProduksi: List<BatchProduksiUi> = emptyList(),
+    hasilPindai: MutableMap<String, KarungDipindaiUi> =
+        androidx.compose.runtime.remember {
+            androidx.compose.runtime.mutableStateMapOf<String, KarungDipindaiUi>()
+        },
+    onPeriksaPengiriman: (NotifikasiPesananProduksiUi) -> Unit = {}
 ) {
-    var bukaDaftarPesanan by rememberSaveable { mutableStateOf(false) }
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    var bukaDaftarPesanan by rememberSaveable {
+        mutableStateOf(false)
+    }
+
     val posisiGulir = rememberScrollState()
+    val warna = MaterialTheme.colorScheme
 
     if (bukaDaftarPesanan && data != null) {
         BackHandler {
             bukaDaftarPesanan = false
         }
 
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(AccessColors.Background)
-                .safeDrawingPadding()
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = warna.background,
+            contentColor = warna.onBackground
         ) {
-            TextButton(
-                onClick = { bukaDaftarPesanan = false },
-                modifier = Modifier.padding(start = 8.dp)
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .safeDrawingPadding()
             ) {
-                Text("‹  Beranda Produksi", color = AccessColors.Green)
-            }
-
-            Box(modifier = Modifier.weight(1f)) {
-                AlurPersiapanPesananScreen(
-                    daftarPesanan = data.pesanan.map { pesanan ->
-                        NotifikasiPesananProduksiUi(
-                            nomorPesanan = pesanan.nomorPesanan,
-                            pelanggan = pesanan.namaPelanggan,
-                            waktuPesanan = "",
-                            daftarItem = listOf(
-                                ItemPersiapanProduksiUi(
-                                    namaProduk = pesanan.namaProduk,
-                                    kemasan = "${pesanan.beratPerKarungKg} kg",
-                                    jumlahPesanan = pesanan.jumlahKarung,
-                                    jumlahDipindai = 0
-                                )
-                            )
-                        )
+                TextButton(
+                    onClick = {
+                        bukaDaftarPesanan = false
                     },
-                    onPindaiKarung = {},
-                    onPeriksaPengiriman = {}
+                    modifier = Modifier.padding(start = 8.dp)
+                ) {
+                    Text(
+                        text = "‹ Beranda Produksi",
+                        color = warna.primary
+                    )
+                }
+
+                HorizontalDivider(
+                    color = warna.outlineVariant
                 )
+
+                Box(modifier = Modifier.weight(1f)) {
+                    PersiapanDenganPemindai(
+                        daftarPesanan = data.pesanan
+                            .groupBy { it.nomorPesanan }
+                            .map { (nomor, daftarProduk) ->
+                                val pertama = daftarProduk.first()
+
+                                NotifikasiPesananProduksiUi(
+                                    nomorPesanan = nomor,
+                                    pelanggan = pertama.namaPelanggan,
+                                    waktuPesanan = pertama.tanggalPesanan,
+                                    daftarItem = daftarProduk
+                                        .groupBy { it.namaProduk to it.kemasan }
+                                        .map { (produk, baris) ->
+                                            ItemPersiapanProduksiUi(
+                                                namaProduk = produk.first,
+                                                kemasan = produk.second,
+                                                jumlahPesanan = baris.sumOf { it.jumlahKarung },
+                                                jumlahDipindai = 0
+                                            )
+                                        }
+                                )
+                            },
+                        batchProduksi = batchProduksi,
+                        hasilPindai = hasilPindai,
+                        onPeriksaPengiriman = onPeriksaPengiriman
+                    )
+                }
             }
         }
+
         return
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(AccessColors.Background)
-            .safeDrawingPadding(),
-        contentAlignment = Alignment.TopCenter
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = warna.background,
+        contentColor = warna.onBackground
     ) {
-        Column(
+        Box(
             modifier = Modifier
-                .widthIn(max = 600.dp)
-                .fillMaxWidth()
-                .verticalScroll(posisiGulir)
-                .padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(20.dp)
+                .fillMaxSize()
+                .safeDrawingPadding(),
+            contentAlignment = Alignment.TopCenter
         ) {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(
-                    text = "Beranda Produksi",
-                    color = AccessColors.Ink,
-                    fontSize = 27.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = data?.let { "Selamat datang, ${it.namaPetugas}" }
-                        ?: "Selamat datang",
-                    color = AccessColors.Muted,
-                    fontSize = 14.sp
-                )
-            }
-
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Image(
-                    painter = painterResource(R.drawable.logo_stb),
-                    contentDescription = "Logo PT Sri Tani Berkah",
-                    modifier = Modifier.size(width = 80.dp, height = 60.dp)
-                )
-
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(6.dp)
-                ) {
-                    Text(
-                        text = "SIRABAS",
-                        color = AccessColors.Ink,
-                        fontSize = 22.sp,
-                        fontWeight = FontWeight.SemiBold
-                    )
-                    Text(
-                        text = "PT Sri Tani Berkah",
-                        color = AccessColors.Muted,
-                        fontSize = 12.sp
-                    )
-                    Surface(
-                        color = AccessColors.SoftGreen,
-                        shape = RoundedCornerShape(8.dp)
-                    ) {
-                        Text(
-                            text = "Petugas Produksi",
-                            modifier = Modifier.padding(
-                                horizontal = 10.dp,
-                                vertical = 6.dp
-                            ),
-                            color = AccessColors.Green,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.SemiBold
-                        )
-                    }
-                }
-            }
-
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                color = Color(0xFF123F2E),
-                shape = RoundedCornerShape(18.dp)
+            Column(
+                modifier = Modifier
+                    .widthIn(max = 600.dp)
+                    .fillMaxWidth()
+                    .verticalScroll(posisiGulir)
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
                 Column(
-                    modifier = Modifier.padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = "PENERIMAAN HARI INI",
-                        color = Color(0xFFDCECAD),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-
-                    if (data != null) {
-                        Text(
-                            text = data.tanggal,
-                            color = Color(0xFFDCECAD),
-                            fontSize = 12.sp
-                        )
-                    }
-
-                    Text(
-                        text = data?.let {
-                            "${formatBerat(it.penerimaanHariIniKg)} kg"
-                        } ?: "—",
-                        color = Color.White,
-                        fontSize = 34.sp,
+                        text = "Beranda Produksi",
+                        color = warna.onBackground,
+                        fontSize = 27.sp,
                         fontWeight = FontWeight.Bold
                     )
+
                     Text(
                         text = data?.let {
-                            "${it.jumlahPenerimaan} penerimaan tercatat"
-                        } ?: "Data penerimaan belum tersedia",
-                        color = Color(0xFFDCECAD),
-                        fontSize = 13.sp
+                            "Selamat datang, ${it.namaPetugas}"
+                        } ?: "Selamat datang",
+                        color = warna.onSurfaceVariant,
+                        fontSize = 14.sp
                     )
 
-                    HorizontalDivider(color = Color.White.copy(alpha = 0.25f))
+                    Spacer(Modifier.height(4.dp))
 
-                    Text(
-                        text = data?.let {
-                            "Stok bahan baku tersedia: ${formatBerat(it.stokBahanBakuKg)} kg"
-                        } ?: "Stok bahan baku: —",
-                        color = Color(0xFFDCECAD),
-                        fontSize = 13.sp,
-                        lineHeight = 20.sp
+                    HorizontalDivider(
+                        color = warna.outlineVariant,
+                        thickness = 1.dp
                     )
                 }
-            }
 
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(IntrinsicSize.Min),
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                ProductionSummaryCard(
-                    title = "Tugas label",
-                    value = data?.jumlahTugasLabel?.toString() ?: "—",
-                    description = "Label perlu ditindaklanjuti",
-                    modifier = Modifier.weight(1f).fillMaxHeight()
-                )
-                ProductionSummaryCard(
-                    title = "Draf penerimaan",
-                    value = data?.let {
-                        "${formatBerat(it.drafPenerimaanKg)} kg"
-                    } ?: "—",
-                    description = "Belum menambah stok",
-                    modifier = Modifier.weight(1f).fillMaxHeight()
-                )
-            }
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Image(
+                        painter = painterResource(R.drawable.logo_stb),
+                        contentDescription = "Logo PT Sri Tani Berkah",
+                        modifier = Modifier.size(
+                            width = 80.dp,
+                            height = 60.dp
+                        )
+                    )
 
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(
-                    text = "Pesanan perlu disiapkan",
-                    color = AccessColors.Ink,
-                    fontSize = 20.sp,
-                    fontWeight = FontWeight.Bold
-                )
-                Text(
-                    text = "Pesanan dari bagian penjualan.",
-                    color = AccessColors.Muted,
-                    fontSize = 13.sp
-                )
-
-                if (data != null && data.pesanan.isNotEmpty()) {
-                    TextButton(
-                        onClick = { bukaDaftarPesanan = true },
-                        contentPadding = PaddingValues(horizontal = 0.dp)
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         Text(
-                            text = "Lihat daftar pesanan ›",
-                            color = AccessColors.Green,
+                            text = "SIRABAS",
+                            color = warna.onBackground,
+                            fontSize = 22.sp,
                             fontWeight = FontWeight.SemiBold
                         )
+
+                        Text(
+                            text = "PT Sri Tani Berkah",
+                            color = warna.onSurfaceVariant,
+                            fontSize = 12.sp
+                        )
+
+                        Surface(
+                            color = warna.secondaryContainer,
+                            contentColor = warna.onSecondaryContainer,
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text(
+                                text = "Petugas Produksi",
+                                modifier = Modifier.padding(
+                                    horizontal = 10.dp,
+                                    vertical = 6.dp
+                                ),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
                 }
-            }
 
-            when {
-                data == null -> {
-                    AccessCard {
+                // Kartu utama tetap hijau tua dengan teks terang.
+                Surface(
+                    modifier = Modifier.fillMaxWidth(),
+                    color = Color(0xFF123F2E),
+                    contentColor = Color.White,
+                    shape = RoundedCornerShape(18.dp)
+                ) {
+                    Column(
+                        modifier = Modifier.padding(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
                         Text(
-                            text = "Data pesanan belum tersedia",
-                            color = AccessColors.Ink,
-                            fontWeight = FontWeight.SemiBold
+                            text = "PENERIMAAN HARI INI",
+                            color = Color(0xFFDCECAD),
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium
                         )
-                    }
-                }
 
-                data.pesanan.isEmpty() -> {
-                    AccessCard {
+                        if (data != null) {
+                            Text(
+                                text = data.tanggal,
+                                color = Color(0xFFDCECAD),
+                                fontSize = 12.sp
+                            )
+                        }
+
                         Text(
-                            text = "Belum ada pesanan yang perlu disiapkan",
-                            color = AccessColors.Ink,
-                            fontWeight = FontWeight.SemiBold
+                            text = data?.let {
+                                "${formatBerat(it.penerimaanHariIniKg)} kg"
+                            } ?: "—",
+                            color = Color.White,
+                            fontSize = 34.sp,
+                            fontWeight = FontWeight.Bold
                         )
+
                         Text(
-                            text = "Pesanan baru akan ditampilkan di sini.",
-                            color = AccessColors.Muted,
+                            text = data?.let {
+                                "${it.jumlahPenerimaan} penerimaan tercatat"
+                            } ?: "Data penerimaan belum tersedia",
+                            color = Color(0xFFDCECAD),
+                            fontSize = 13.sp
+                        )
+
+                        HorizontalDivider(
+                            color = Color.White.copy(alpha = 0.25f)
+                        )
+
+                        Text(
+                            text = data?.let {
+                                "Stok bahan baku tersedia: " +
+                                        "${formatBerat(it.stokBahanBakuKg)} kg"
+                            } ?: "Stok bahan baku: —",
+                            color = Color(0xFFDCECAD),
                             fontSize = 13.sp,
                             lineHeight = 20.sp
                         )
                     }
                 }
 
-                else -> {
-                    data.pesanan.forEach { pesanan ->
-                        ProductionOrderCard(pesanan)
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(IntrinsicSize.Min),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    ProductionSummaryCard(
+                        title = "Tugas label",
+                        value = data?.jumlahTugasLabel?.toString() ?: "—",
+                        description = "Label perlu ditindaklanjuti",
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                    )
+
+                    ProductionSummaryCard(
+                        title = "Draf penerimaan",
+                        value = data?.let {
+                            "${formatBerat(it.drafPenerimaanKg)} kg"
+                        } ?: "—",
+                        description = "Belum menambah stok",
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                    )
+                }
+
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Text(
+                        text = "Pesanan perlu disiapkan",
+                        color = warna.onBackground,
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Text(
+                        text = "Pesanan dari bagian penjualan.",
+                        color = warna.onSurfaceVariant,
+                        fontSize = 13.sp
+                    )
+
+                    if (data != null && data.pesanan.isNotEmpty()) {
+                        TextButton(
+                            onClick = {
+                                bukaDaftarPesanan = true
+                            },
+                            contentPadding = PaddingValues(
+                                horizontal = 0.dp
+                            )
+                        ) {
+                            Text(
+                                text = "Lihat daftar pesanan ›",
+                                color = warna.primary,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
                     }
                 }
-            }
 
-            Spacer(Modifier.height(12.dp))
+                when {
+                    data == null -> {
+                        AccessCard {
+                            Text(
+                                text = "Data pesanan belum tersedia",
+                                color = warna.onSurface,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+
+                    data.pesanan.isEmpty() -> {
+                        AccessCard {
+                            Text(
+                                text = "Belum ada pesanan yang perlu disiapkan",
+                                color = warna.onSurface,
+                                fontWeight = FontWeight.SemiBold
+                            )
+
+                            Text(
+                                text = "Pesanan baru akan ditampilkan di sini.",
+                                color = warna.onSurfaceVariant,
+                                fontSize = 13.sp,
+                                lineHeight = 20.sp
+                            )
+                        }
+                    }
+
+                    else -> {
+                        data.pesanan.forEach { pesanan ->
+                            ProductionOrderCard(pesanan)
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
+            }
         }
     }
 }
@@ -317,11 +392,17 @@ private fun ProductionSummaryCard(
     description: String,
     modifier: Modifier = Modifier
 ) {
+    val warna = MaterialTheme.colorScheme
+
     Surface(
         modifier = modifier,
-        color = Color.White,
+        color = warna.surface,
+        contentColor = warna.onSurface,
         shape = RoundedCornerShape(14.dp),
-        border = BorderStroke(1.dp, AccessColors.Border)
+        border = BorderStroke(
+            width = 1.dp,
+            color = warna.outlineVariant
+        )
     ) {
         Column(
             modifier = Modifier
@@ -329,16 +410,22 @@ private fun ProductionSummaryCard(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Text(title, color = AccessColors.Muted, fontSize = 12.sp)
+            Text(
+                text = title,
+                color = warna.onSurfaceVariant,
+                fontSize = 12.sp
+            )
+
             Text(
                 text = value,
-                color = AccessColors.Ink,
+                color = warna.onSurface,
                 fontSize = 25.sp,
                 fontWeight = FontWeight.Bold
             )
+
             Text(
                 text = description,
-                color = AccessColors.Muted,
+                color = warna.onSurfaceVariant,
                 fontSize = 12.sp,
                 lineHeight = 18.sp
             )
@@ -347,16 +434,23 @@ private fun ProductionSummaryCard(
 }
 
 @Composable
-private fun ProductionOrderCard(pesanan: ProductionOrderUi) {
+private fun ProductionOrderCard(
+    pesanan: ProductionOrderUi
+) {
+    val warna = MaterialTheme.colorScheme
+
     AccessCard {
         Surface(
-            color = AccessColors.SoftGold,
+            color = warna.tertiaryContainer,
+            contentColor = warna.onTertiaryContainer,
             shape = RoundedCornerShape(8.dp)
         ) {
             Text(
                 text = "Menunggu persiapan",
-                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                color = AccessColors.GoldInk,
+                modifier = Modifier.padding(
+                    horizontal = 10.dp,
+                    vertical = 6.dp
+                ),
                 fontSize = 12.sp,
                 fontWeight = FontWeight.SemiBold
             )
@@ -364,32 +458,38 @@ private fun ProductionOrderCard(pesanan: ProductionOrderUi) {
 
         Text(
             text = pesanan.namaPelanggan,
-            color = AccessColors.Ink,
+            color = warna.onSurface,
             fontSize = 20.sp,
             fontWeight = FontWeight.Bold
         )
+
         Text(
             text = pesanan.nomorPesanan,
-            color = AccessColors.Muted,
+            color = warna.onSurfaceVariant,
             fontSize = 12.sp
         )
 
-        HorizontalDivider(color = AccessColors.Border)
+        HorizontalDivider(
+            color = warna.outlineVariant
+        )
 
         Text(
             text = pesanan.namaProduk,
-            color = AccessColors.Ink,
+            color = warna.onSurface,
             fontSize = 15.sp,
             fontWeight = FontWeight.SemiBold
         )
+
         Text(
-            text = "${pesanan.jumlahKarung} karung · ${pesanan.beratPerKarungKg} kg/karung",
-            color = AccessColors.Muted,
+            text = "${pesanan.jumlahKarung} karung · ${pesanan.kemasan}",
+            color = warna.onSurfaceVariant,
             fontSize = 14.sp
         )
+
         Text(
-            text = "Pindai label setiap karung saat menyiapkan barang untuk pengiriman.",
-            color = AccessColors.Green,
+            text = "Pindai label setiap karung saat menyiapkan " +
+                    "barang untuk pengiriman.",
+            color = warna.primary,
             fontSize = 13.sp,
             lineHeight = 20.sp
         )
@@ -397,39 +497,60 @@ private fun ProductionOrderCard(pesanan: ProductionOrderUi) {
 }
 
 private fun formatBerat(value: Double): String {
-    return NumberFormat.getNumberInstance(Locale.forLanguageTag("id-ID")).apply {
+    return NumberFormat.getNumberInstance(
+        Locale.forLanguageTag("id-ID")
+    ).apply {
         maximumFractionDigits = 2
     }.format(value)
 }
 
+private fun contohBerandaProduksi(): ProductionHomeUi {
+    return ProductionHomeUi(
+        namaPetugas = "Dedi",
+        tanggal = "18 November 2026",
+        penerimaanHariIniKg = 1000.0,
+        jumlahPenerimaan = 1,
+        stokBahanBakuKg = 1500.0,
+        jumlahTugasLabel = 1,
+        drafPenerimaanKg = 200.0,
+        pesanan = listOf(
+            ProductionOrderUi(
+                nomorPesanan = "PS-001",
+                namaPelanggan = "MBG A",
+                namaProduk = "Beras Premium",
+                beratPerKarungKg = 25,
+                jumlahKarung = 50
+            )
+        )
+    )
+}
+
 @Preview(
-    name = "Beranda Produksi",
+    name = "Beranda Produksi · Terang",
     showBackground = true,
     widthDp = 390,
     heightDp = 844
 )
 @Composable
 fun ProductionHomeScreenPreview() {
-    SIRABASTheme {
+    SIRABASTheme(darkTheme = false) {
         ProductionHomeScreen(
-            data = ProductionHomeUi(
-                namaPetugas = "Dedi",
-                tanggal = "11 November 2026",
-                penerimaanHariIniKg = 1000.0,
-                jumlahPenerimaan = 1,
-                stokBahanBakuKg = 1500.0,
-                jumlahTugasLabel = 1,
-                drafPenerimaanKg = 200.0,
-                pesanan = listOf(
-                    ProductionOrderUi(
-                        nomorPesanan = "PS-001",
-                        namaPelanggan = "MBG A",
-                        namaProduk = "Beras Premium",
-                        beratPerKarungKg = 25,
-                        jumlahKarung = 50
-                    )
-                )
-            )
+            data = contohBerandaProduksi()
+        )
+    }
+}
+
+@Preview(
+    name = "Beranda Produksi · Gelap",
+    showBackground = true,
+    widthDp = 390,
+    heightDp = 844
+)
+@Composable
+private fun ProductionHomeScreenDarkPreview() {
+    SIRABASTheme(darkTheme = true) {
+        ProductionHomeScreen(
+            data = contohBerandaProduksi()
         )
     }
 }

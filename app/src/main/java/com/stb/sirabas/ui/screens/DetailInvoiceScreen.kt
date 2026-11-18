@@ -82,12 +82,28 @@ fun DetailInvoiceScreen(
                     verticalArrangement = Arrangement.spacedBy(14.dp)
                 ) {
                     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-                        Text(
-                            text = namaPt,
-                            color = AccessColors.Green,
-                            fontSize = 20.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            androidx.compose.foundation.Image(
+                                painter = androidx.compose.ui.res.painterResource(
+                                    id = com.stb.sirabas.R.drawable.logo_stb
+                                ),
+                                contentDescription = null,
+                                contentScale = androidx.compose.ui.layout.ContentScale.Fit,
+                                modifier = Modifier.size(56.dp)
+                            )
+
+                            Text(
+                                text = namaPt,
+                                modifier = Modifier.weight(1f),
+                                color = AccessColors.Green,
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                         if (alamatPt.isNotBlank()) {
                             Text(alamatPt, color = AccessColors.Muted)
                         }
@@ -215,7 +231,7 @@ fun DetailInvoiceScreen(
                         contentColor = Color.White
                     )
                 ) {
-                    Text("Cetak invoice")
+                    Text("Cetak / PDF")
                 }
             }
         }

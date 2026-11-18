@@ -1,5 +1,6 @@
 package com.stb.sirabas.ui.screens
 
+import android.content.res.Configuration
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
@@ -12,7 +13,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
@@ -48,6 +48,7 @@ fun KartuProdukPenjualan(
     ) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val warna = MaterialTheme.colorScheme
     val formatAngka = remember {
         NumberFormat.getIntegerInstance(Locale.forLanguageTag("id-ID"))
     }
@@ -63,197 +64,180 @@ fun KartuProdukPenjualan(
     val stok = produk.stokTersedia.coerceAtLeast(0)
     val jumlah = if (stok == 0) 0 else jumlahPilihan.coerceIn(1, stok)
     val harga = hargaTeks.toLongOrNull()
-    val bisaDitambah = harga != null && harga > 0 && jumlah > 0
+    val hargaValid = harga != null && harga > 0L
+    val bisaDitambah = hargaValid && jumlah > 0
 
-    val subtotal = if (harga != null && harga > 0 && jumlah > 0) {
+    val subtotal = if (harga != null && harga > 0L && jumlah > 0) {
         BigDecimal.valueOf(harga) * BigDecimal.valueOf(jumlah.toLong())
     } else {
         null
     }
 
-    MaterialTheme(
-        colorScheme = MaterialTheme.colorScheme.copy(
-            primary = AccessColors.Green,
-            onPrimary = Color.White
+    OutlinedCard(
+        modifier = modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.outlinedCardColors(
+            containerColor = warna.surface,
+            contentColor = warna.onSurface
         )
     ) {
-        OutlinedCard(
-            modifier = modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.outlinedCardColors(
-                containerColor = Color.White,
-                contentColor = AccessColors.Ink
-            )
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                Box(
+                    modifier = Modifier
+                        .size(96.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(warna.secondaryContainer)
+                        .padding(5.dp),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(96.dp)
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(AccessColors.SoftGreen)
-                            .padding(5.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        val foto = produk.fotoRes
+                    val foto = produk.fotoRes
 
-                        if (foto != null) {
-                            Image(
-                                painter = painterResource(id = foto),
-                                contentDescription = "${produk.nama}, ${produk.kemasan}",
-                                contentScale = ContentScale.Fit,
-                                modifier = Modifier.fillMaxSize()
-                            )
-                        } else {
-                            Text(
-                                text = "Foto produk",
-                                color = AccessColors.Green,
-                                fontSize = 12.sp
-                            )
-                        }
-                    }
-
-                    Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        Text(
-                            text = produk.nama,
-                            color = AccessColors.Ink,
-                            fontSize = 19.sp,
-                            fontWeight = FontWeight.Bold
+                    if (foto != null) {
+                        Image(
+                            painter = painterResource(id = foto),
+                            contentDescription = "${produk.nama}, ${produk.kemasan}",
+                            contentScale = ContentScale.Fit,
+                            modifier = Modifier.fillMaxSize()
                         )
-
+                    } else {
                         Text(
-                            text = produk.kemasan,
-                            color = AccessColors.Muted
-                        )
-
-                        Text(
-                            text = if (stok > 0) {
-                                "Tersedia $stok ${produk.satuanJual}"
-                            } else {
-                                "Stok habis"
-                            },
-                            color = if (stok > 0) AccessColors.Green else AccessColors.Muted,
-                            fontSize = 13.sp,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
-
-                HorizontalDivider(color = AccessColors.Border)
-
-                Text(
-                    text = "Harga katalog: Rp${formatAngka.format(produk.hargaKatalog)}" +
-                            " / ${produk.satuanJual}",
-                    fontWeight = FontWeight.SemiBold
-                )
-
-                OutlinedTextField(
-                    value = hargaTeks,
-                    onValueChange = { teks ->
-                        if (teks.all { it in '0'..'9' }) {
-                            hargaTeks = teks
-                        }
-                    },
-                    label = { Text("Harga pesanan per ${produk.satuanJual}") },
-                    prefix = { Text("Rp") },
-                    singleLine = true,
-                    enabled = stok > 0,
-                    isError = stok > 0 && (harga == null || harga <= 0),
-                    keyboardOptions = KeyboardOptions(
-                        keyboardType = KeyboardType.Number
-                    ),
-                    shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = AccessColors.Green,
-                        focusedLabelColor = AccessColors.Green,
-                        cursorColor = AccessColors.Green,
-                        unfocusedBorderColor = AccessColors.Border,
-                        focusedTextColor = AccessColors.Ink,
-                        unfocusedTextColor = AccessColors.Ink
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Text("Jumlah", fontWeight = FontWeight.SemiBold)
-
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        OutlinedButton(
-                            onClick = { jumlahPilihan = jumlah - 1 },
-                            enabled = jumlah > 1,
-                            contentPadding = PaddingValues(horizontal = 12.dp),
-                            modifier = Modifier.semantics {
-                                contentDescription = "Kurangi jumlah pesanan"
-                            }
-                        ) {
-                            Text("−")
-                        }
-
-                        Text("$jumlah ${produk.satuanJual}")
-
-                        OutlinedButton(
-                            onClick = { jumlahPilihan = jumlah + 1 },
-                            enabled = jumlah < stok,
-                            contentPadding = PaddingValues(horizontal = 12.dp),
-                            modifier = Modifier.semantics {
-                                contentDescription = "Tambah jumlah pesanan"
-                            }
-                        ) {
-                            Text("+")
-                        }
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Subtotal",
-                            color = AccessColors.Muted,
+                            text = "Foto produk",
+                            color = warna.onSecondaryContainer,
                             fontSize = 12.sp
                         )
-                        Text(
-                            text = subtotal?.let { "Rp${formatAngka.format(it)}" } ?: "—",
-                            color = AccessColors.Green,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold
-                        )
+                    }
+                }
+
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = produk.nama,
+                        fontSize = 19.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Text(
+                        text = produk.kemasan,
+                        color = warna.onSurfaceVariant
+                    )
+
+                    Text(
+                        text = if (stok > 0) {
+                            "Tersedia $stok ${produk.satuanJual}"
+                        } else {
+                            "Stok habis"
+                        },
+                        color = if (stok > 0) warna.primary else warna.onSurfaceVariant,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+
+            HorizontalDivider(color = warna.outlineVariant)
+
+            Text(
+                text = "Harga katalog: Rp${formatAngka.format(produk.hargaKatalog)}" +
+                        " / ${produk.satuanJual}",
+                fontWeight = FontWeight.SemiBold
+            )
+
+            OutlinedTextField(
+                value = hargaTeks,
+                onValueChange = { teks ->
+                    if (teks.all { it in '0'..'9' }) {
+                        hargaTeks = teks
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Harga pesanan per ${produk.satuanJual}") },
+                prefix = { Text("Rp ") },
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = KeyboardType.Number
+                ),
+                singleLine = true,
+                enabled = stok > 0,
+                isError = stok > 0 && !hargaValid,
+                shape = RoundedCornerShape(12.dp)
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text("Jumlah", fontWeight = FontWeight.SemiBold)
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { jumlahPilihan = jumlah - 1 },
+                        enabled = jumlah > 1,
+                        contentPadding = PaddingValues(horizontal = 12.dp),
+                        modifier = Modifier.semantics {
+                            contentDescription = "Kurangi jumlah pesanan"
+                        }
+                    ) {
+                        Text("−")
                     }
 
-                    Button(
-                        onClick = {
-                            if (harga != null && harga > 0 && jumlah > 0) {
-                                onTambah(produk, jumlah, harga)
-                            }
-                        },
-                        enabled = bisaDitambah,
-                        shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = AccessColors.Green,
-                            contentColor = Color.White
-                        )
+                    Text("$jumlah ${produk.satuanJual}")
+
+                    OutlinedButton(
+                        onClick = { jumlahPilihan = jumlah + 1 },
+                        enabled = jumlah < stok,
+                        contentPadding = PaddingValues(horizontal = 12.dp),
+                        modifier = Modifier.semantics {
+                            contentDescription = "Tambah jumlah pesanan"
+                        }
                     ) {
-                        Text("Tambah")
+                        Text("+")
                     }
+                }
+            }
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Subtotal",
+                        color = warna.onSurfaceVariant,
+                        fontSize = 12.sp
+                    )
+
+                    Text(
+                        text = subtotal?.let { "Rp${formatAngka.format(it)}" } ?: "—",
+                        color = warna.primary,
+                        fontSize = 18.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Button(
+                    onClick = {
+                        if (harga != null && harga > 0L && jumlah > 0) {
+                            onTambah(produk, jumlah, harga)
+                        }
+                    },
+                    enabled = bisaDitambah,
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text("Tambah")
                 }
             }
         }
@@ -261,16 +245,23 @@ fun KartuProdukPenjualan(
 }
 
 @Preview(
-    name = "Penjualan · Premium 25 kg hijau",
+    name = "Kartu produk · Terang",
     showBackground = true,
-    widthDp = 390
+    widthDp = 390,
+    uiMode = Configuration.UI_MODE_NIGHT_NO
+)
+@Preview(
+    name = "Kartu produk · Gelap",
+    showBackground = true,
+    widthDp = 390,
+    uiMode = Configuration.UI_MODE_NIGHT_YES
 )
 @Composable
 private fun KartuProdukPenjualanPreview() {
     SIRABASTheme {
         Box(
             modifier = Modifier
-                .background(AccessColors.Background)
+                .background(MaterialTheme.colorScheme.background)
                 .padding(16.dp)
         ) {
             KartuProdukPenjualan(
@@ -281,7 +272,7 @@ private fun KartuProdukPenjualanPreview() {
                     satuanJual = "karung",
                     stokTersedia = 12,
                     hargaKatalog = 350_000L,
-                    fotoRes = com.stb.sirabas.R.drawable.premium_25kg_hijau
+                    fotoRes = R.drawable.premium_25kg_hijau
                 ),
                 onTambah = { _, _, _ -> }
             )

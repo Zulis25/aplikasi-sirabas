@@ -1,16 +1,15 @@
 package com.stb.sirabas.ui.screens
 
-import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -22,210 +21,411 @@ import java.util.Locale
 fun StokBahanBakuScreen(
     stokTersediaKg: Double?,
     penerimaanBaru: List<BahanBakuUi>,
-    batchProduksi: List<BatchProduksiUi> = emptyList()
+    batchProduksi: List<BatchProduksiUi> = emptyList(),
+    kodeSudahKeluar: Set<String> = emptySet()
 ) {
+    val warna = MaterialTheme.colorScheme
+
+    var kategori by rememberSaveable {
+        mutableStateOf("Semua")
+    }
+
+    val pilihanKategori = listOf(
+        "Semua",
+        "Hasil utama",
+        "Hasil samping",
+        "Riwayat penerimaan",
+        "Riwayat produksi"
+    )
+
     val formatAngka = remember {
-        NumberFormat.getNumberInstance(Locale.forLanguageTag("id-ID")).apply {
+        NumberFormat.getNumberInstance(
+            Locale.forLanguageTag("id-ID")
+        ).apply {
             maximumFractionDigits = 3
         }
     }
 
-    // Ambil seluruh baris hasil utama, lalu kelompokkan per produk dan kemasan.
+    fun kg(nilai: Number): String {
+        return "${formatAngka.format(nilai)} kg"
+    }
+
     val kelompokUtama = batchProduksi
-        .flatMap { batch -> batch.rincian.hasilUtama }
-        .groupBy { baris ->
-            baris.namaProduk.trim().lowercase(Locale.ROOT) to
-                    baris.kemasan.trim().lowercase(Locale.ROOT)
+        .flatMap { batch -> hasilUtamaSetelahPengiriman(batch, kodeSudahKeluar) }
+        .groupBy {
+            it.namaProduk.trim().lowercase(Locale.ROOT) to
+                    it.kemasan.trim().lowercase(Locale.ROOT)
         }
 
-    // Satu batch dapat menyumbang berat ke beberapa jenis hasil samping.
     val kelompokSamping = batchProduksi
-        .flatMap { batch -> batch.rincian.hasilSamping }
-        .groupBy { baris ->
-            baris.namaProduk.trim().lowercase(Locale.ROOT)
+        .flatMap { it.rincian.hasilSamping }
+        .groupBy {
+            it.namaProduk.trim().lowercase(Locale.ROOT)
         }
 
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(AccessColors.Background),
-        contentPadding = PaddingValues(20.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp)
+    Surface(
+        modifier = Modifier.fillMaxSize(),
+        color = warna.background,
+        contentColor = warna.onBackground
     ) {
-        item {
-            Text(
-                text = "Stok Gudang",
-                color = AccessColors.Ink,
-                fontSize = 27.sp,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-        item {
-            Surface(
-                modifier = Modifier.fillMaxWidth(),
-                color = Color(0xFF123F2E),
-                shape = RoundedCornerShape(18.dp)
-            ) {
+        LazyColumn(
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            item {
                 Column(
-                    modifier = Modifier.padding(20.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Text(
-                        text = "Stok bahan baku tersedia",
-                        color = Color.White,
+                        text = "Stok Gudang",
+                        color = warna.onBackground,
+                        fontSize = 27.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+
+                    Text(
+                        text = "Pantau bahan baku dan hasil produksi.",
+                        color = warna.onSurfaceVariant,
                         fontSize = 14.sp
                     )
 
-                    // Saldo dari halaman induk sudah dikurangi pemakaian produksi.
-                    Text(
-                        text = stokTersediaKg?.let {
-                            "${formatAngka.format(it)} kg"
-                        } ?: "Saldo awal belum tersedia",
-                        color = Color.White,
-                        fontSize = if (stokTersediaKg != null) 32.sp else 18.sp,
-                        fontWeight = FontWeight.Bold
+                    HorizontalDivider(
+                        color = warna.outlineVariant
                     )
                 }
             }
-        }
 
-        item {
-            JudulBagianStok("Stok hasil utama")
-        }
-
-        if (kelompokUtama.isEmpty()) {
             item {
-                Text("Belum ada hasil utama tercatat.", color = AccessColors.Muted)
-            }
-        } else {
-            items(kelompokUtama.values.toList()) { barisProduk ->
-                val produk = barisProduk.first()
-                val totalKg = barisProduk.fold(BigDecimal.ZERO) { jumlah, baris ->
-                    jumlah + baris.beratKg
-                }
-
-                KartuSaldoProduk(
-                    nama = "${produk.namaProduk} · ${produk.kemasan}",
-                    saldo = "${formatAngka.format(totalKg)} kg"
-                )
-            }
-        }
-
-        item {
-            JudulBagianStok("Stok hasil samping")
-        }
-
-        if (kelompokSamping.isEmpty()) {
-            item {
-                Text("Belum ada hasil samping tercatat.", color = AccessColors.Muted)
-            }
-        } else {
-            items(kelompokSamping.values.toList()) { barisProduk ->
-                val totalKg = barisProduk.fold(BigDecimal.ZERO) { jumlah, baris ->
-                    jumlah + baris.beratKg
-                }
-
-                KartuSaldoProduk(
-                    nama = barisProduk.first().namaProduk,
-                    saldo = "${formatAngka.format(totalKg)} kg"
-                )
-            }
-        }
-
-        if (batchProduksi.isNotEmpty()) {
-            item {
-                JudulBagianStok("Riwayat produksi")
-            }
-
-            items(
-                items = batchProduksi.asReversed(),
-                key = { batch -> "produksi-${batch.kode}" }
-            ) { batch ->
-                AccessCard {
-                    Text(
-                        text = "${batch.kode} · ${batch.tanggal}",
-                        fontWeight = FontWeight.Bold,
-                        color = AccessColors.Ink
-                    )
-                    Text("Lot bahan: ${batch.kodeBahan}")
-                    Text("Bahan dipakai: ${formatAngka.format(batch.beratInput)} kg")
-
-                    if (batch.rincian.hasilUtama.isNotEmpty()) {
-                        Text(
-                            text = "Hasil utama · ${formatAngka.format(batch.beratUtama)} kg",
-                            fontWeight = FontWeight.SemiBold,
-                            color = AccessColors.Ink
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    pilihanKategori.forEach { pilihan ->
+                        FilterChip(
+                            selected = kategori == pilihan,
+                            onClick = {
+                                kategori = pilihan
+                            },
+                            label = {
+                                Text(pilihan)
+                            },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor =
+                                    warna.secondaryContainer,
+                                selectedLabelColor =
+                                    warna.onSecondaryContainer
+                            )
                         )
-                        batch.rincian.hasilUtama.forEach { baris ->
+                    }
+                }
+            }
+
+            if (kategori == "Semua") {
+                item {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(18.dp),
+                        color = warna.primaryContainer,
+                        contentColor = warna.onPrimaryContainer
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(20.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
                             Text(
-                                "${baris.namaProduk} · ${baris.kemasan} — " +
-                                        "${formatAngka.format(baris.beratKg)} kg"
+                                text = "Stok bahan baku tersedia",
+                                fontSize = 14.sp
+                            )
+
+                            Text(
+                                text = stokTersediaKg?.let {
+                                    kg(it)
+                                } ?: "Saldo belum tersedia",
+                                fontSize = 30.sp,
+                                fontWeight = FontWeight.Bold
                             )
                         }
                     }
+                }
+            }
 
-                    if (batch.rincian.hasilSamping.isNotEmpty()) {
-                        Text(
-                            text = "Hasil samping · ${formatAngka.format(batch.beratSamping)} kg",
-                            fontWeight = FontWeight.SemiBold,
-                            color = AccessColors.Ink
+            if (
+                kategori == "Semua" ||
+                kategori == "Hasil utama"
+            ) {
+                item {
+                    JudulBagianGudang("Stok hasil utama")
+                }
+
+                if (kelompokUtama.isEmpty()) {
+                    item {
+                        PesanKosongGudang(
+                            "Belum ada hasil utama tercatat."
                         )
-                        batch.rincian.hasilSamping.forEach { baris ->
+                    }
+                } else {
+                    items(
+                        items = kelompokUtama.values.toList()
+                    ) { barisProduk ->
+                        val produk = barisProduk.first()
+
+                        val totalKg = barisProduk.fold(
+                            BigDecimal.ZERO
+                        ) { total, baris ->
+                            total + baris.beratKg
+                        }
+
+                        AccessCard {
                             Text(
-                                "${baris.namaProduk} — " +
-                                        "${formatAngka.format(baris.beratKg)} kg"
+                                text = "${produk.namaProduk} · " +
+                                        produk.kemasan,
+                                color = warna.onSurface,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+
+                            Text(
+                                text = kg(totalKg),
+                                color = warna.primary,
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+
+                            HorizontalDivider(
+                                color = warna.outlineVariant
+                            )
+
+                            Text(
+                                text = rincianKemasanGudang(
+                                    totalKg = totalKg,
+                                    kemasan = produk.kemasan
+                                ),
+                                color = warna.onSurfaceVariant,
+                                fontSize = 14.sp,
+                                lineHeight = 21.sp
                             )
                         }
                     }
-
-                    Text(
-                        text = "Susut: ${formatAngka.format(batch.susut)} kg",
-                        fontWeight = FontWeight.SemiBold
-                    )
                 }
             }
-        }
 
-        item {
-            JudulBagianStok("Penerimaan baru")
-        }
+            if (
+                kategori == "Semua" ||
+                kategori == "Hasil samping"
+            ) {
+                item {
+                    JudulBagianGudang("Stok hasil samping")
+                }
 
-        if (penerimaanBaru.isEmpty()) {
-            item {
-                AccessCard {
-                    Text("Belum ada penerimaan baru.", color = AccessColors.Muted)
+                if (kelompokSamping.isEmpty()) {
+                    item {
+                        PesanKosongGudang(
+                            "Belum ada hasil samping tercatat."
+                        )
+                    }
+                } else {
+                    items(
+                        items = kelompokSamping.values.toList()
+                    ) { barisProduk ->
+                        val totalKg = barisProduk.fold(
+                            BigDecimal.ZERO
+                        ) { total, baris ->
+                            total + baris.beratKg
+                        }
+
+                        AccessCard {
+                            Text(
+                                text = barisProduk.first().namaProduk,
+                                color = warna.onSurface,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+
+                            Text(
+                                text = kg(totalKg),
+                                color = warna.primary,
+                                fontSize = 24.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+
+                            Text(
+                                text = "Dicatat berdasarkan berat (kg)",
+                                color = warna.onSurfaceVariant,
+                                fontSize = 13.sp
+                            )
+                        }
+                    }
                 }
             }
-        } else {
-            items(
-                items = penerimaanBaru.asReversed(),
-                key = { bahan -> "penerimaan-${bahan.kode}" }
-            ) { bahan ->
-                val sisaKg = sisaLotKg(bahan, batchProduksi)
 
-                AccessCard {
-                    Text(
-                        text = "${bahan.kode} · ${bahan.tanggal}",
-                        color = AccessColors.Muted,
-                        fontSize = 12.sp
+            if (
+                kategori == "Semua" ||
+                kategori == "Riwayat penerimaan"
+            ) {
+                item {
+                    JudulBagianGudang(
+                        "Riwayat penerimaan bahan baku"
                     )
-                    Text(
-                        text = bahan.jenis,
-                        color = AccessColors.Ink,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "${bahan.supplier} · ${bahan.asalDaerah}",
-                        color = AccessColors.Muted
-                    )
-                    Text("Berat diterima: ${formatAngka.format(bahan.beratKg)} kg")
-                    Text(
-                        text = "Sisa lot: ${formatAngka.format(sisaKg)} kg",
-                        color = AccessColors.Green,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                }
+
+                if (penerimaanBaru.isEmpty()) {
+                    item {
+                        PesanKosongGudang(
+                            "Belum ada penerimaan bahan baku."
+                        )
+                    }
+                } else {
+                    items(
+                        items = penerimaanBaru.sortedByDescending {
+                            it.tanggal
+                        },
+                        key = {
+                            "penerimaan-${it.kode}"
+                        }
+                    ) { bahan ->
+                        val sisa = sisaLotKg(
+                            bahan,
+                            batchProduksi
+                        )
+
+                        AccessCard {
+                            Text(
+                                text = "${bahan.kode} · ${bahan.tanggal}",
+                                color = warna.onSurfaceVariant,
+                                fontSize = 13.sp
+                            )
+
+                            Text(
+                                text = bahan.jenis,
+                                color = warna.onSurface,
+                                fontSize = 20.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+
+                            Text(
+                                text = bahan.supplier,
+                                color = warna.onSurface,
+                                fontWeight = FontWeight.SemiBold
+                            )
+
+                            if (bahan.asalDaerah.isNotBlank()) {
+                                Text(
+                                    text = bahan.asalDaerah,
+                                    color = warna.onSurfaceVariant
+                                )
+                            }
+
+                            HorizontalDivider(
+                                color = warna.outlineVariant
+                            )
+
+                            Text(
+                                text = "Berat diterima: ${kg(bahan.beratKg)}",
+                                color = warna.onSurface
+                            )
+
+                            Text(
+                                text = "Sisa lot: ${kg(sisa)}",
+                                color = warna.primary,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (
+                kategori == "Semua" ||
+                kategori == "Riwayat produksi"
+            ) {
+                item {
+                    JudulBagianGudang("Riwayat produksi")
+                }
+
+                if (batchProduksi.isEmpty()) {
+                    item {
+                        PesanKosongGudang(
+                            "Belum ada produksi tercatat."
+                        )
+                    }
+                } else {
+                    items(
+                        items = batchProduksi.asReversed(),
+                        key = {
+                            "produksi-${it.kode}"
+                        }
+                    ) { batch ->
+                        AccessCard {
+                            Text(
+                                text = "${batch.kode} · ${batch.tanggal}",
+                                color = warna.onSurface,
+                                fontSize = 18.sp,
+                                fontWeight = FontWeight.Bold
+                            )
+
+                            Text(
+                                text = "Lot bahan: ${batch.kodeBahan}",
+                                color = warna.onSurfaceVariant
+                            )
+
+                            Text(
+                                text = "Bahan dipakai: ${kg(batch.beratInput)}",
+                                color = warna.onSurface
+                            )
+
+                            DaftarLabelBatch(batch = batch)
+
+                            HorizontalDivider(
+                                color = warna.outlineVariant
+                            )
+
+                            if (batch.rincian.hasilUtama.isNotEmpty()) {
+                                Text(
+                                    text = "Hasil utama",
+                                    color = warna.onSurface,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+
+                                batch.rincian.hasilUtama.forEach { hasil ->
+                                    Text(
+                                        text = "${hasil.namaProduk} · " +
+                                                "${hasil.kemasan}: " +
+                                                kg(hasil.beratKg),
+                                        color = warna.onSurfaceVariant
+                                    )
+                                }
+                            }
+
+                            if (batch.rincian.hasilSamping.isNotEmpty()) {
+                                Text(
+                                    text = "Hasil samping",
+                                    color = warna.onSurface,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+
+                                batch.rincian.hasilSamping.forEach { hasil ->
+                                    Text(
+                                        text = "${hasil.namaProduk}: " +
+                                                kg(hasil.beratKg),
+                                        color = warna.onSurfaceVariant
+                                    )
+                                }
+                            }
+
+                            HorizontalDivider(
+                                color = warna.outlineVariant
+                            )
+
+                            Text(
+                                text = "Susut: ${kg(batch.susut)}",
+                                color = warna.primary,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -233,73 +433,65 @@ fun StokBahanBakuScreen(
 }
 
 @Composable
-private fun JudulBagianStok(judul: String) {
+private fun JudulBagianGudang(judul: String) {
     Text(
         text = judul,
-        color = AccessColors.Ink,
-        fontSize = 19.sp,
+        color = MaterialTheme.colorScheme.onBackground,
+        fontSize = 20.sp,
         fontWeight = FontWeight.SemiBold
     )
 }
 
 @Composable
-private fun KartuSaldoProduk(
-    nama: String,
-    saldo: String
-) {
+private fun PesanKosongGudang(pesan: String) {
     AccessCard {
         Text(
-            text = nama,
-            color = AccessColors.Ink,
-            fontWeight = FontWeight.SemiBold
-        )
-        Text(
-            text = saldo,
-            color = AccessColors.Green,
-            fontSize = 18.sp,
-            fontWeight = FontWeight.Bold
+            text = pesan,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            fontSize = 14.sp,
+            lineHeight = 21.sp
         )
     }
 }
-@androidx.compose.ui.tooling.preview.Preview(
-    name = "Stok Gudang · Petugas Produksi",
-    showBackground = true,
-    widthDp = 390,
-    heightDp = 844
-)
-@Composable
-private fun PreviewStokGudangProduksi() {
-    val contohBatch = BatchProduksiUi(
-        kode = "PR/001",
-        tanggal = "2026-11-11",
-        kodeBahan = "BM/025",
-        beratInput = java.math.BigDecimal("200"),
-        rincian = RincianHasilProduksiUi(
-            hasilUtama = listOf(
-                HasilUtamaProduksiUi(
-                    namaProduk = "Premium",
-                    kemasan = "5 kg",
-                    beratKg = java.math.BigDecimal("180")
-                )
-            ),
-            hasilSamping = listOf(
-                HasilSampingProduksiUi(
-                    namaProduk = "Dedak Halus",
-                    beratKg = java.math.BigDecimal("8")
-                ),
-                HasilSampingProduksiUi(
-                    namaProduk = "Sekam",
-                    beratKg = java.math.BigDecimal("5")
-                )
-            )
-        )
+
+private fun rincianKemasanGudang(
+    totalKg: BigDecimal,
+    kemasan: String
+): String {
+    val beratPerKemasan = Regex(
+        pattern = """(\d+(?:[.,]\d+)?)\s*kg""",
+        option = RegexOption.IGNORE_CASE
+    )
+        .find(kemasan)
+        ?.groupValues
+        ?.get(1)
+        ?.replace(',', '.')
+        ?.toBigDecimalOrNull()
+        ?.takeIf {
+            it.signum() > 0
+        }
+        ?: return "Jumlah kemasan belum dapat dihitung."
+
+    val jumlahUtuh = totalKg.divideToIntegralValue(
+        beratPerKemasan
     )
 
-    com.stb.sirabas.ui.theme.SIRABASTheme {
-        StokBahanBakuScreen(
-            stokTersediaKg = 300.0,
-            penerimaanBaru = emptyList(),
-            batchProduksi = listOf(contohBatch)
-        )
+    val sisaCurah = totalKg.remainder(
+        beratPerKemasan
+    )
+
+    val format = NumberFormat.getNumberInstance(
+        Locale.forLanguageTag("id-ID")
+    ).apply {
+        maximumFractionDigits = 3
+    }
+
+    val ringkasan = "Setara ${format.format(jumlahUtuh)} karung × " +
+            "${format.format(beratPerKemasan)} kg"
+
+    return if (sisaCurah.signum() > 0) {
+        "$ringkasan\nSisa curah: ${format.format(sisaCurah)} kg"
+    } else {
+        ringkasan
     }
 }

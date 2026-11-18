@@ -6,6 +6,7 @@ import android.content.ContextWrapper
 import android.print.PrintAttributes
 import android.print.PrintManager
 import android.text.TextUtils
+import android.util.Base64
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.compose.runtime.Composable
@@ -15,6 +16,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import com.stb.sirabas.R
 import java.math.BigInteger
 import java.text.NumberFormat
 import java.util.Locale
@@ -30,8 +32,9 @@ fun rememberCetakInvoice(
     val context = LocalContext.current
     val activity = remember(context) { cariActivityCetak(context) }
 
-    // Menahan dokumen selama WebView sedang menyiapkan halaman cetak.
-    var dokumenMenunggu by remember { mutableStateOf<WebView?>(null) }
+    var dokumenMenunggu by remember {
+        mutableStateOf<WebView?>(null)
+    }
 
     DisposableEffect(Unit) {
         onDispose {
@@ -48,7 +51,9 @@ fun rememberCetakInvoice(
             return@mulaiCetak
         }
 
-        val layanan = activity.getSystemService(Context.PRINT_SERVICE) as? PrintManager
+        val layanan =
+            activity.getSystemService(Context.PRINT_SERVICE) as? PrintManager
+
         if (layanan == null) {
             onGagal("Layanan cetak tidak tersedia di perangkat ini.")
             return@mulaiCetak
@@ -57,6 +62,14 @@ fun rememberCetakInvoice(
         val namaDokumen = "Invoice ${invoice.nomor}"
 
         try {
+            val html = buatHtmlInvoice(
+                context = context,
+                invoice = invoice,
+                namaPt = namaPt,
+                alamatPt = alamatPt,
+                teleponPt = teleponPt
+            )
+
             val dokumen = WebView(activity)
             dokumenMenunggu = dokumen
 
@@ -82,12 +95,12 @@ fun rememberCetakInvoice(
 
             dokumen.loadDataWithBaseURL(
                 null,
-                buatHtmlInvoice(invoice, namaPt, alamatPt, teleponPt),
+                html,
                 "text/html",
                 "UTF-8",
                 null
             )
-        } catch (e: RuntimeException) {
+        } catch (e: Exception) {
             dokumenMenunggu?.destroy()
             dokumenMenunggu = null
             onGagal("Dokumen invoice gagal disiapkan.")
@@ -104,45 +117,70 @@ private tailrec fun cariActivityCetak(context: Context): Activity? {
 }
 
 private fun buatHtmlInvoice(
+    context: Context,
     invoice: InvoicePenjualanUi,
     namaPt: String,
     alamatPt: String,
     teleponPt: String
 ): String {
-    val format = NumberFormat.getIntegerInstance(Locale.forLanguageTag("id-ID"))
+    val formatAngka = NumberFormat.getIntegerInstance(
+        Locale.forLanguageTag("id-ID")
+    )
 
-    fun rupiah(nilai: BigInteger): String = "Rp${format.format(nilai)}"
+    fun rupiah(nilai: BigInteger): String =
+        "Rp${formatAngka.format(nilai)}"
 
-    // Nama pelanggan seperti "Toko A & B" tetap tercetak dengan benar.
-    fun teks(nilai: String): String = TextUtils.htmlEncode(nilai)
+    fun teks(nilai: String): String =
+        TextUtils.htmlEncode(nilai)
+
+    val logoBase64 = context.resources
+        .openRawResource(R.drawable.logo_stb)
+        .use { input ->
+            Base64.encodeToString(input.readBytes(), Base64.NO_WRAP)
+        }
+
+    val alamat = if (alamatPt.isBlank()) {
+        ""
+    } else {
+        "<div>${teks(alamatPt)}</div>"
+    }
+
+    val telepon = if (teleponPt.isBlank()) {
+        ""
+    } else {
+        "<div>Telp. ${teks(teleponPt)}</div>"
+    }
 
     val barisProduk = invoice.daftarItem.joinToString("\n") { item ->
         val produk = item.produk
-        val harga = item.hargaSatuan.toBigInteger()
-        val subtotal = harga * item.jumlah.toBigInteger()
+        val hargaSatuan = item.hargaSatuan.toBigInteger()
+        val subtotal = hargaSatuan * item.jumlah.toBigInteger()
 
         """
         <tr>
-            <td>${teks(produk.nama)}<br><small>${teks(produk.kemasan)}</small></td>
+            <td>
+                <strong>${teks(produk.nama)}</strong><br>
+                <small>${teks(produk.kemasan)}</small>
+            </td>
             <td>${item.jumlah} ${teks(produk.satuanJual)}</td>
-            <td class="angka">${rupiah(harga)}</td>
+            <td class="angka">${rupiah(hargaSatuan)}</td>
             <td class="angka">${rupiah(subtotal)}</td>
         </tr>
         """.trimIndent()
     }
 
-    val alamat = if (alamatPt.isBlank()) "" else "<div>${teks(alamatPt)}</div>"
-    val telepon = if (teleponPt.isBlank()) "" else "<div>Telp. ${teks(teleponPt)}</div>"
     val status = if (invoice.lunas) "Lunas" else "Piutang"
-
     val metode = invoice.metodePembayaran
-    val barisMetode = if (invoice.jumlahDibayar > 0 && !metode.isNullOrBlank()) {
+
+    val barisMetode = if (invoice.jumlahDibayar > 0L && !metode.isNullOrBlank()) {
         "<p>Metode pembayaran terakhir: ${teks(metode)}</p>"
     } else {
         ""
     }
 
-    val barisPiutang = if (invoice.lunas) "" else {
+    val barisPiutang = if (invoice.lunas) {
+        ""
+    } else {
         "<p><strong>Sisa piutang: ${rupiah(invoice.sisaPiutang)}</strong></p>"
     }
 
@@ -151,25 +189,53 @@ private fun buatHtmlInvoice(
         <html lang="id">
         <head>
             <meta charset="UTF-8">
+            <title>Invoice ${teks(invoice.nomor)}</title>
             <style>
-                body { font-family: sans-serif; color: #203028; padding: 18px; }
+                body {
+                    font-family: sans-serif;
+                    color: #203028;
+                    padding: 18px;
+                }
+                .perusahaan {
+                    display: flex;
+                    align-items: center;
+                    margin-bottom: 12px;
+                }
+                .logo {
+                    width: 64px;
+                    height: 64px;
+                    object-fit: contain;
+                    margin-right: 12px;
+                }
                 h1 { font-size: 24px; margin: 24px 0 4px; }
                 h2 { font-size: 20px; color: #176344; margin: 0 0 5px; }
                 p { margin: 6px 0; }
-                table { width: 100%; border-collapse: collapse; margin: 22px 0; }
-                th, td { padding: 9px 5px; border-bottom: 1px solid #ccd8ce;
-                         text-align: left; vertical-align: top; }
+                table {
+                    width: 100%;
+                    border-collapse: collapse;
+                    margin: 22px 0;
+                }
+                th, td {
+                    padding: 9px 5px;
+                    border-bottom: 1px solid #ccd8ce;
+                    text-align: left;
+                    vertical-align: top;
+                }
                 th { color: #123f2e; }
                 small { color: #506657; }
                 .angka { text-align: right; }
-                tr { page-break-inside: avoid; }
-                .ringkasan { page-break-inside: avoid; }
+                tr, .ringkasan { page-break-inside: avoid; }
             </style>
         </head>
         <body>
-            <h2>${teks(namaPt)}</h2>
-            $alamat
-            $telepon
+            <div class="perusahaan">
+                <img class="logo" src="data:image/png;base64,$logoBase64" alt="">
+                <div>
+                    <h2>${teks(namaPt)}</h2>
+                    $alamat
+                    $telepon
+                </div>
+            </div>
 
             <h1>Invoice</h1>
             <p>${teks(invoice.nomor)}</p>
@@ -185,13 +251,15 @@ private fun buatHtmlInvoice(
                         <th class="angka">Subtotal</th>
                     </tr>
                 </thead>
-                <tbody>$barisProduk</tbody>
+                <tbody>
+                    $barisProduk
+                </tbody>
             </table>
 
             <div class="ringkasan">
-                <h2>Total ${rupiah(invoice.total)}</h2>
-                <p>Status pembayaran: $status</p>
+                <h2>Total invoice: ${rupiah(invoice.total)}</h2>
                 <p>Sudah dibayar: ${rupiah(invoice.jumlahDibayar.toBigInteger())}</p>
+                <p>Status pembayaran: $status</p>
                 $barisMetode
                 $barisPiutang
             </div>
