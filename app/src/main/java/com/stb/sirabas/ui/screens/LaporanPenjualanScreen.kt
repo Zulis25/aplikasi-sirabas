@@ -306,7 +306,7 @@ fun LaporanPenjualanScreen(
                 }
             }
 
-            items(invoicePeriode, key = { it.nomor }) { invoice ->
+            items(invoicePeriode.distinctBy { it.nomor }) { invoice ->
                 Surface(
                     modifier = Modifier.fillMaxWidth(),
                     color = Color.White,

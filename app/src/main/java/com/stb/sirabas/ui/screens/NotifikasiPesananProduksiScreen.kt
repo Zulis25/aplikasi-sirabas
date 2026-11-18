@@ -67,7 +67,7 @@ fun NotifikasiPesananProduksiScreen(
             }
         }
 
-        items(daftarPesanan, key = { it.nomorPesanan }) { pesanan ->
+        items(daftarPesanan.distinctBy { it.nomorPesanan }) { pesanan ->
             KartuPersiapanProduksi(
                 pesanan = pesanan,
                 onBuka = { onBukaPersiapan(pesanan) }

@@ -40,6 +40,9 @@ private enum class ProductionTab(
 fun ProductionMainScreen(
     dataBeranda: ProductionHomeUi? = null,
     dataBahanBaku: List<BahanBakuUi>? = null,
+    dataBatch: List<BatchProduksiUi>? = null,
+    onSimpanBahanBaku: ((BahanBakuUi) -> Unit)? = null,
+    onSimpanBatch: ((BatchProduksiUi) -> Unit)? = null,
     usernamePanduan: String = "",
     halamanAkun: @Composable () -> Unit = {
         ProductionSectionScreen(
@@ -62,13 +65,16 @@ fun ProductionMainScreen(
     val penyimpanState = rememberSaveableStateHolder()
 
     // Data bersama untuk tab Produksi, Beranda, dan Stok.
-    // Penyimpanan permanen akan disambungkan pada tahap berikutnya.
-    val penerimaanBaru = remember {
-        mutableStateListOf<BahanBakuUi>()
+    val penerimaanBaru = remember(dataBahanBaku) {
+        mutableStateListOf<BahanBakuUi>().apply {
+            if (dataBahanBaku != null) addAll(dataBahanBaku)
+        }
     }
 
-    val batchProduksi = remember {
-        mutableStateListOf<BatchProduksiUi>()
+    val batchProduksi = remember(dataBatch) {
+        mutableStateListOf<BatchProduksiUi>().apply {
+            if (dataBatch != null) addAll(dataBatch)
+        }
     }
 
     val hasilPindai = remember {
@@ -358,7 +364,11 @@ fun ProductionMainScreen(
                                             halamanProduksi ==
                                             "tambah_bahan"
                                         ) {
-                                            penerimaanBaru.add(bahan)
+                                            if (onSimpanBahanBaku != null) {
+                                                onSimpanBahanBaku(bahan)
+                                            } else {
+                                                penerimaanBaru.add(bahan)
+                                            }
                                             halamanProduksi = "bahan"
                                         }
                                     }
@@ -433,11 +443,14 @@ fun ProductionMainScreen(
                                                     .toString()
                                                     .padStart(3, '0')
 
-                                        batchProduksi.add(
-                                            isian.copy(
-                                                kode = kodeBatch
-                                            )
+                                        val batchBaru = isian.copy(
+                                            kode = kodeBatch
                                         )
+                                        if (onSimpanBatch != null) {
+                                            onSimpanBatch(batchBaru)
+                                        } else {
+                                            batchProduksi.add(batchBaru)
+                                        }
 
                                         halamanProduksi = "menu"
 

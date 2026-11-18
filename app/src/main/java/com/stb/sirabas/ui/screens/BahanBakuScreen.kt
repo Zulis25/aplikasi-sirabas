@@ -26,7 +26,8 @@ data class BahanBakuUi(
     val beratKg: Double,
     val kadarAir: Double?,
     val derajatSosoh: Double?,
-    val broken: Double?
+    val broken: Double?,
+    val petugas: String = ""
 )
 
 @Composable
@@ -225,8 +226,7 @@ fun BahanBakuScreen(
 
                 else -> {
                     items(
-                        items = hasilFilter,
-                        key = { it.kode }
+                        items = hasilFilter.distinctBy { it.kode }
                     ) { bahan ->
                         BahanBakuCard(bahan = bahan)
                     }
@@ -280,6 +280,14 @@ private fun BahanBakuCard(
             color = AccessColors.Green,
             fontWeight = FontWeight.SemiBold
         )
+
+        if (bahan.petugas.isNotBlank()) {
+            Text(
+                text = "Dicatat oleh: ${bahan.petugas}",
+                color = AccessColors.Muted,
+                fontSize = 12.sp
+            )
+        }
 
         TextButton(
             onClick = {

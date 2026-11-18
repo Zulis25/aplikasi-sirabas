@@ -14,6 +14,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -37,10 +38,46 @@ fun PendingActivationScreen(
     nama: String,
     username: String,
     whatsapp: String,
+    statusAktivasi: String = "MENUNGGU_AKTIVASI", // "MENUNGGU_AKTIVASI", "AKTIF", "NON_AKTIF"
+    onCekStatus: () -> Unit = {},
     onMasuk: () -> Unit = {}
 ) {
+    val statusClean = statusAktivasi.uppercase().trim()
+    val isAktif = statusClean == "AKTIF"
+    val isNonAktif = statusClean == "NON_AKTIF" || statusClean == "TIDAK_AKTIF" || statusClean == "DITOLAK"
+
+    val badgeText = when {
+        isAktif -> "Aktif"
+        isNonAktif -> "Non-aktif"
+        else -> "Menunggu aktivasi"
+    }
+
+    val badgeBg = when {
+        isAktif -> Color(0xFFE8F5E9)
+        isNonAktif -> Color(0xFFFFEBEE)
+        else -> AccessColors.SoftGold
+    }
+
+    val badgeColor = when {
+        isAktif -> Color(0xFF2E7D32)
+        isNonAktif -> Color(0xFFC62828)
+        else -> AccessColors.GoldInk
+    }
+
+    val titleText = when {
+        isAktif -> "Akun telah aktif!"
+        isNonAktif -> "Akun non-aktif"
+        else -> "Menunggu aktivasi"
+    }
+
+    val descriptionText = when {
+        isAktif -> "Akun Anda telah disetujui dan diaktifkan oleh Admin. Silakan tekan tombol di bawah untuk masuk ke aplikasi."
+        isNonAktif -> "Akun Anda sedang dinonaktifkan atau belum disetujui oleh Admin. Silakan hubungi pengelola sistem untuk informasi lebih lanjut."
+        else -> "Akun Anda sedang menunggu aktivasi oleh Admin. Pemberitahuan akan dikirim ke nomor WhatsApp yang Anda daftarkan setelah akun aktif."
+    }
+
     AccessPage(
-        title = "Aktivasi akun",
+        title = "Status akun",
         onBack = onMasuk
     ) {
         Spacer(
@@ -54,7 +91,7 @@ fun PendingActivationScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             Surface(
-                color = AccessColors.SoftGold,
+                color = badgeBg,
                 shape = RoundedCornerShape(24.dp)
             ) {
                 Box(
@@ -67,13 +104,13 @@ fun PendingActivationScreen(
                         ),
                         contentDescription = null,
                         modifier = Modifier.size(42.dp),
-                        tint = AccessColors.GoldInk
+                        tint = badgeColor
                     )
                 }
             }
 
             Text(
-                text = "Menunggu aktivasi",
+                text = titleText,
                 color = AccessColors.Ink,
                 fontSize = 28.sp,
                 fontWeight = FontWeight.Bold,
@@ -81,10 +118,7 @@ fun PendingActivationScreen(
             )
 
             Text(
-                text = "Akun Anda sedang menunggu aktivasi " +
-                        "oleh Admin. Pemberitahuan akan dikirim " +
-                        "ke nomor WhatsApp yang Anda daftarkan " +
-                        "setelah akun aktif.",
+                text = descriptionText,
                 modifier = Modifier.padding(
                     horizontal = 8.dp
                 ),
@@ -102,16 +136,16 @@ fun PendingActivationScreen(
         // IDENTITAS AKUN
         AccessCard {
             Surface(
-                color = AccessColors.SoftGold,
-                shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+                color = badgeBg,
+                shape = RoundedCornerShape(8.dp)
             ) {
                 Text(
-                    text = "Menunggu aktivasi",
+                    text = badgeText,
                     modifier = Modifier.padding(
                         horizontal = 12.dp,
                         vertical = 7.dp
                     ),
-                    color = AccessColors.GoldInk,
+                    color = badgeColor,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.SemiBold
                 )
@@ -163,33 +197,59 @@ fun PendingActivationScreen(
             }
         }
 
-        // KEMBALI KE HALAMAN LOGIN
-        Button(
-            onClick = onMasuk,
-            modifier = Modifier
-                .fillMaxWidth()
-                .heightIn(min = 52.dp),
-            shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(
-                containerColor = AccessColors.Green,
-                contentColor = Color.White
-            )
-        ) {
-            Text(
-                text = "Kembali ke login",
-                fontSize = 15.sp,
-                fontWeight = FontWeight.SemiBold
-            )
-        }
+        // TOMBOL AKSI
+        if (!isAktif) {
+            Button(
+                onClick = onCekStatus,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 52.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = AccessColors.Green,
+                    contentColor = Color.White
+                )
+            ) {
+                Text(
+                    text = "Cek status aktivasi",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
 
-        Text(
-            text = "Anda dapat masuk setelah akun diaktifkan.",
-            modifier = Modifier.fillMaxWidth(),
-            color = AccessColors.Muted,
-            fontSize = 12.sp,
-            lineHeight = 18.sp,
-            textAlign = TextAlign.Center
-        )
+            OutlinedButton(
+                onClick = onMasuk,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 52.dp),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text(
+                    text = "Kembali ke login",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    color = AccessColors.Ink
+                )
+            }
+        } else {
+            Button(
+                onClick = onMasuk,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 52.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = AccessColors.Green,
+                    contentColor = Color.White
+                )
+            ) {
+                Text(
+                    text = "Masuk ke aplikasi",
+                    fontSize = 15.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
+            }
+        }
 
         Spacer(
             modifier = Modifier.height(12.dp)
@@ -208,7 +268,8 @@ fun PendingActivationScreenPreview() {
         PendingActivationScreen(
             nama = "Budi Santoso",
             username = "Budi_01",
-            whatsapp = "+6281234567890"
+            whatsapp = "+6281234567890",
+            statusAktivasi = "MENUNGGU_AKTIVASI"
         )
     }
 }

@@ -388,7 +388,7 @@ fun RiwayatPenjualanScreen(
                 }
             }
 
-            items(invoiceTampil, key = { it.nomor }) { item ->
+            items(invoiceTampil.distinctBy { it.nomor }) { item ->
                 OutlinedCard(
                     onClick = {
                         nomorTerpilih = item.nomor

@@ -279,11 +279,8 @@ fun StokBahanBakuScreen(
                     }
                 } else {
                     items(
-                        items = penerimaanBaru.sortedByDescending {
+                        items = penerimaanBaru.distinctBy { it.kode }.sortedByDescending {
                             it.tanggal
-                        },
-                        key = {
-                            "penerimaan-${it.kode}"
                         }
                     ) { bahan ->
                         val sisa = sisaLotKg(
@@ -353,10 +350,7 @@ fun StokBahanBakuScreen(
                     }
                 } else {
                     items(
-                        items = batchProduksi.asReversed(),
-                        key = {
-                            "produksi-${it.kode}"
-                        }
+                        items = batchProduksi.distinctBy { it.kode }.asReversed()
                     ) { batch ->
                         AccessCard {
                             Text(

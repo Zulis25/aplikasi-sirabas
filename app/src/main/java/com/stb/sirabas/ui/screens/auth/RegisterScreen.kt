@@ -52,8 +52,9 @@ fun RegisterScreen(
     onPendaftaranDiajukan: (
         nama: String,
         username: String,
-        whatsapp: String
-    ) -> Unit = { _, _, _ -> }
+        whatsapp: String,
+        password: String
+    ) -> Unit = { _, _, _, _ -> }
 ) {
     var nama by rememberSaveable {
         mutableStateOf("")
@@ -160,17 +161,17 @@ fun RegisterScreen(
         pernahDikirim = true
 
         if (formValid && whatsappNormal != null) {
+            val typedPassword = password
             focusManager.clearFocus()
 
             password = ""
             konfirmasi = ""
 
-            // SIMULASI:
-            // Belum mengirim data ke API atau membuat akun.
             onPendaftaranDiajukan(
                 kapitalAwal(nama.trim()),
                 kapitalAwal(username.trim()),
-                whatsappNormal
+                whatsappNormal,
+                typedPassword
             )
         }
     }
