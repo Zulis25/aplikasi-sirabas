@@ -25,23 +25,29 @@ import java.util.Locale
 fun FormBahanBakuScreen(
     kodeBaru: String,
     onKembali: () -> Unit,
+    drafAwal: DrafPenerimaanUi? = null,
+    onSimpanDraf: ((DrafPenerimaanUi) -> Unit)? = null,
+    sedangMenyimpan: Boolean = false,
     onSimpan: (BahanBakuUi) -> Unit
 ) {
-    var jenis by rememberSaveable { mutableStateOf("Gabah") }
-    var supplier by rememberSaveable { mutableStateOf("") }
-    var daerah by rememberSaveable { mutableStateOf("") }
-    var berat by rememberSaveable { mutableStateOf("") }
-
-    var tanggal by rememberSaveable {
-        mutableStateOf(
-            SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date())
-        )
+    val idDraf = rememberSaveable(drafAwal?.id) {
+        drafAwal?.id ?: java.util.UUID.randomUUID().toString()
     }
 
-    var air by rememberSaveable { mutableStateOf("") }
-    var sosoh by rememberSaveable { mutableStateOf("") }
-    var broken by rememberSaveable { mutableStateOf("") }
-    var periksa by rememberSaveable { mutableStateOf(false) }
+    var jenis by rememberSaveable(idDraf) { mutableStateOf(drafAwal?.jenis ?: "Gabah") }
+    var supplier by rememberSaveable(idDraf) { mutableStateOf(drafAwal?.supplier.orEmpty()) }
+    var daerah by rememberSaveable(idDraf) { mutableStateOf(drafAwal?.daerah.orEmpty()) }
+    var berat by rememberSaveable(idDraf) { mutableStateOf(drafAwal?.berat.orEmpty()) }
+    var tanggal by rememberSaveable(idDraf) {
+        mutableStateOf(
+            drafAwal?.tanggal
+                ?: SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date())
+        )
+    }
+    var air by rememberSaveable(idDraf) { mutableStateOf(drafAwal?.air.orEmpty()) }
+    var sosoh by rememberSaveable(idDraf) { mutableStateOf(drafAwal?.sosoh.orEmpty()) }
+    var broken by rememberSaveable(idDraf) { mutableStateOf(drafAwal?.broken.orEmpty()) }
+    var periksa by rememberSaveable(idDraf) { mutableStateOf(false) }
 
     // Menerima angka desimal dengan koma maupun titik.
     val beratAngka = bacaAngkaBahan(berat)
@@ -200,7 +206,32 @@ fun FormBahanBakuScreen(
                 } else null
             )
 
+            if (onSimpanDraf != null) {
+                OutlinedButton(
+                    enabled = !sedangMenyimpan,
+                    onClick = {
+                        onSimpanDraf(
+                            DrafPenerimaanUi(
+                                id = idDraf,
+                                jenis = jenis,
+                                supplier = supplier,
+                                daerah = daerah,
+                                tanggal = tanggal,
+                                berat = berat,
+                                air = air,
+                                sosoh = sosoh,
+                                broken = broken
+                            )
+                        )
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Simpan sebagai draf")
+                }
+            }
+
             Button(
+                enabled = !sedangMenyimpan,
                 onClick = {
                     periksa = true
 

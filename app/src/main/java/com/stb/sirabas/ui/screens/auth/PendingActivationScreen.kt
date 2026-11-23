@@ -65,7 +65,7 @@ fun PendingActivationScreen(
     }
 
     val titleText = when {
-        isAktif -> "Akun telah aktif!"
+        isAktif -> "Aktivasi berhasil"
         isNonAktif -> "Akun non-aktif"
         else -> "Menunggu aktivasi"
     }
@@ -78,7 +78,8 @@ fun PendingActivationScreen(
 
     AccessPage(
         title = "Status akun",
-        onBack = onMasuk
+        onBack = onMasuk,
+        headerTetap = true
     ) {
         Spacer(
             modifier = Modifier.height(12.dp)
@@ -98,14 +99,21 @@ fun PendingActivationScreen(
                     modifier = Modifier.size(88.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    Icon(
-                        painter = painterResource(
-                            R.drawable.sirabas_clock
-                        ),
-                        contentDescription = null,
-                        modifier = Modifier.size(42.dp),
-                        tint = badgeColor
-                    )
+                    if (isAktif) {
+                        Text(
+                            text = "✓",
+                            color = badgeColor,
+                            fontSize = 42.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    } else {
+                        Icon(
+                            painter = painterResource(R.drawable.sirabas_clock),
+                            contentDescription = null,
+                            modifier = Modifier.size(42.dp),
+                            tint = badgeColor
+                        )
+                    }
                 }
             }
 

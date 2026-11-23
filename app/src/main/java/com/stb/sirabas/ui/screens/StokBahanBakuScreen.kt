@@ -414,7 +414,27 @@ fun StokBahanBakuScreen(
                             )
 
                             Text(
-                                text = "Susut: ${kg(batch.susut)}",
+                                text = when {
+                                    batch.beratInput.signum() <= 0 ->
+                                        "Susut belum dapat dihitung: berat bahan belum tersedia."
+
+                                    batch.rincian.hasilUtama.isEmpty() ->
+                                        "Susut belum dapat dihitung: rincian hasil utama belum tersedia."
+
+                                    batch.susut.signum() < 0 ->
+                                        "Periksa data: total hasil melebihi berat bahan yang dipakai."
+
+                                    else -> {
+                                        val persen = batch.susut
+                                            .multiply(java.math.BigDecimal("100"))
+                                            .divide(batch.beratInput, 2, java.math.RoundingMode.HALF_UP)
+                                            .stripTrailingZeros()
+                                            .toPlainString()
+                                            .replace('.', ',')
+
+                                        "Susut: $persen% (${kg(batch.susut)})"
+                                    }
+                                },
                                 color = warna.primary,
                                 fontWeight = FontWeight.Bold
                             )

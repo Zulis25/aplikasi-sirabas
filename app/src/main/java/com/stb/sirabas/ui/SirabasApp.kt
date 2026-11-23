@@ -83,6 +83,13 @@ fun SirabasApp() {
         )
     }
 
+    val pengajuan = remember(context) {
+        context.getSharedPreferences(
+            "sirabas_pengajuan_akun",
+            android.content.Context.MODE_PRIVATE
+        )
+    }
+
     var layar by rememberSaveable {
         val usernameTersimpan = sesiLogin.getString("username", "")
         val peranTersimpan = sesiLogin.getString("peran", "")
@@ -94,7 +101,8 @@ fun SirabasApp() {
             buildDebug && !usernameTersimpan.isNullOrBlank() &&
                     peranTersimpan == "penjualan" -> "penjualan"
 
-            sesiLogin.getBoolean("pernah_masuk", false) -> "login"
+            pengajuan.contains("username") ||
+                    sesiLogin.getBoolean("pernah_masuk", false) -> "login"
 
             else -> "onboarding"
         }
@@ -114,11 +122,54 @@ fun SirabasApp() {
     var tampilkanSplash by rememberSaveable { mutableStateOf(true) }
     var pesan by rememberSaveable { mutableStateOf<String?>(null) }
 
-    var namaPengajuan by rememberSaveable { mutableStateOf("") }
-    var usernamePengajuan by rememberSaveable { mutableStateOf("") }
-    var whatsappPengajuan by rememberSaveable { mutableStateOf("") }
-    var statusAktivasiAkun by rememberSaveable { mutableStateOf("MENUNGGU_AKTIVASI") }
-    var lastPassword by rememberSaveable { mutableStateOf("") }
+    var namaPengajuan by remember {
+        mutableStateOf(pengajuan.getString("nama", "").orEmpty())
+    }
+    var usernamePengajuan by remember {
+        mutableStateOf(pengajuan.getString("username", "").orEmpty())
+    }
+    var whatsappPengajuan by remember {
+        mutableStateOf(pengajuan.getString("whatsapp", "").orEmpty())
+    }
+    var statusAktivasiAkun by remember {
+        mutableStateOf(
+            pengajuan.getString("status", "MENUNGGU_AKTIVASI")
+                ?: "MENUNGGU_AKTIVASI"
+        )
+    }
+
+// Hanya dipakai selama aplikasi masih terbuka.
+    var lastPassword by remember { mutableStateOf("") }
+
+    fun simpanPengajuan(
+        nama: String,
+        username: String,
+        whatsapp: String,
+        status: String
+    ) {
+        namaPengajuan = nama
+        usernamePengajuan = username.trim()
+        whatsappPengajuan = whatsapp
+        statusAktivasiAkun = status
+
+        pengajuan.edit()
+            .putString("nama", namaPengajuan)
+            .putString("username", usernamePengajuan)
+            .putString("whatsapp", whatsappPengajuan)
+            .putString("status", statusAktivasiAkun)
+            .apply()
+    }
+
+    fun hapusPengajuanJikaMilik(username: String) {
+        if (usernamePengajuan == username.trim()) {
+            pengajuan.edit().clear().apply()
+            namaPengajuan = ""
+            usernamePengajuan = ""
+            whatsappPengajuan = ""
+            statusAktivasiAkun = "MENUNGGU_AKTIVASI"
+            lastPassword = ""
+        }
+    }
 
     // Data frontend untuk sesi aplikasi ini.
     val daftarInvoice = remember { mutableStateListOf<InvoicePenjualanUi>() }
@@ -143,7 +194,12 @@ fun SirabasApp() {
         kembaliKeLogin()
     }
 
-    SIRABASTheme(darkTheme = modeGelap, dynamicColor = false) {
+    val sedangDiDashboard = layar == "produksi" || layar == "penjualan"
+
+    SIRABASTheme(
+        darkTheme = sedangDiDashboard && modeGelap,
+        dynamicColor = false
+    ) {
         if (tampilkanSplash) {
             SplashScreen()
         } else {
@@ -153,7 +209,13 @@ fun SirabasApp() {
                 )
 
                 "login" -> LoginScreen(
-                    onDaftar = { layar = "register" },
+                    onDaftar = {
+                        layar = if (usernamePengajuan.isBlank()) {
+                            "register"
+                        } else {
+                            "menunggu_aktivasi"
+                        }
+                    },
                     onMasuk = { username, sandi ->
                         val nama = username.trim()
 
@@ -170,24 +232,55 @@ fun SirabasApp() {
                                 scope.launch {
                                     when (val res = authRepository.login(nama, sandi)) {
                                         is AuthResult.Success -> {
-                                            val usernameSaved = res.data.username
-                                            val namaLengkapSaved = res.data.nama_lengkap ?: usernameSaved
-                                            val roleApi = if (res.data.role.equals("produksi", true)) "produksi" else "penjualan"
+                                            val pengguna = res.data
+                                            val usernameServer = pengguna.username
+                                            val peranServer = pengguna.role.orEmpty().trim().lowercase(Locale.ROOT)
 
-                                            sesiLogin.edit()
-                                                .putString("username", usernameSaved)
-                                                .putString("nama_lengkap", namaLengkapSaved)
-                                                .putString("peran", roleApi)
-                                                .putBoolean("pernah_masuk", true)
-                                                .apply()
+                                            when {
+                                                peranServer !in setOf("produksi", "penjualan") -> {
+                                                    authRepository.logout()
+                                                    pesan = "Akses aplikasi mobile tersedia untuk petugas Produksi dan Penjualan."
+                                                }
 
-                                            masukKeDashboard(usernameSaved, roleApi)
+                                                usernamePengajuan.equals(usernameServer, ignoreCase = true) &&
+                                                        statusAktivasiAkun == "MENUNGGU_AKTIVASI" -> {
+                                                    authRepository.logout()
+
+                                                    simpanPengajuan(
+                                                        nama = pengguna.nama_lengkap ?: namaPengajuan,
+                                                        username = usernameServer,
+                                                        whatsapp = whatsappPengajuan,
+                                                        status = "AKTIF"
+                                                    )
+                                                    lastPassword = ""
+                                                    layar = "menunggu_aktivasi"
+                                                }
+
+                                                else -> {
+                                                    sesiLogin.edit()
+                                                        .putString(
+                                                            "nama_lengkap",
+                                                            pengguna.nama_lengkap ?: usernameServer
+                                                        )
+                                                        .apply()
+
+                                                    hapusPengajuanJikaMilik(usernameServer)
+                                                    masukKeDashboard(usernameServer, peranServer)
+                                                }
+                                            }
                                         }
 
                                         is AuthResult.PendingActivation -> {
-                                            usernamePengajuan = nama
+                                            val pengajuanYangSama = usernamePengajuan == nama
+
+                                            simpanPengajuan(
+                                                nama = if (pengajuanYangSama) namaPengajuan else "",
+                                                username = nama,
+                                                whatsapp = if (pengajuanYangSama) whatsappPengajuan else "",
+                                                status = "MENUNGGU_AKTIVASI"
+                                            )
+
                                             lastPassword = sandi
-                                            statusAktivasiAkun = "MENUNGGU_AKTIVASI"
                                             layar = "menunggu_aktivasi"
                                         }
 
@@ -214,11 +307,13 @@ fun SirabasApp() {
                         scope.launch {
                             when (val res = authRepository.register(username, password, nama, whatsapp, PERUSAHAAN)) {
                                 is AuthResult.Success -> {
-                                    namaPengajuan = nama
-                                    usernamePengajuan = username.trim()
-                                    whatsappPengajuan = whatsapp
+                                    simpanPengajuan(
+                                        nama = nama,
+                                        username = username,
+                                        whatsapp = whatsapp,
+                                        status = "MENUNGGU_AKTIVASI"
+                                    )
                                     lastPassword = password
-                                    statusAktivasiAkun = "MENUNGGU_AKTIVASI"
                                     layar = "menunggu_aktivasi"
                                 }
 
@@ -232,38 +327,84 @@ fun SirabasApp() {
                     }
                 )
 
-                "menunggu_aktivasi" -> PendingActivationScreen(
-                    nama = namaPengajuan,
-                    username = usernamePengajuan,
-                    whatsapp = whatsappPengajuan,
-                    statusAktivasi = statusAktivasiAkun,
-                    onCekStatus = {
-                        scope.launch {
-                            if (usernamePengajuan.isNotBlank() && lastPassword.isNotBlank()) {
-                                when (val res = authRepository.login(usernamePengajuan, lastPassword)) {
-                                    is AuthResult.Success -> {
-                                        statusAktivasiAkun = "AKTIF"
-                                        val roleApi = if (res.data.role.equals("produksi", true)) "produksi" else "penjualan"
-                                        masukKeDashboard(res.data.username, roleApi)
-                                    }
+                "menunggu_aktivasi" -> {
+                    var permintaanCek by remember { mutableStateOf(0) }
+                    val jendelaAktif = androidx.compose.ui.platform.LocalWindowInfo
+                        .current.isWindowFocused
 
-                                    is AuthResult.PendingActivation -> {
-                                        statusAktivasiAkun = "MENUNGGU_AKTIVASI"
-                                        pesan = "Akun Anda masih menunggu aktivasi oleh Admin."
-                                    }
-
-                                    is AuthResult.Error -> {
-                                        statusAktivasiAkun = "NON_AKTIF"
-                                        pesan = "Status akun: Non-aktif atau ditolak (${res.message})."
-                                    }
-                                }
-                            } else {
-                                pesan = "Silakan login kembali melalui halaman utama."
-                            }
+                    LaunchedEffect(
+                        usernamePengajuan,
+                        lastPassword,
+                        statusAktivasiAkun,
+                        permintaanCek,
+                        jendelaAktif
+                    ) {
+                        if (
+                            !jendelaAktif ||
+                            usernamePengajuan.isBlank() ||
+                            lastPassword.isBlank() ||
+                            statusAktivasiAkun != "MENUNGGU_AKTIVASI"
+                        ) {
+                            return@LaunchedEffect
                         }
-                    },
-                    onMasuk = kembaliKeLogin
-                )
+
+                        // Saat halaman pertama dibuka, beri jeda sebelum memeriksa.
+                        // Tombol "Cek status aktivasi" memicu pemeriksaan langsung.
+                        if (permintaanCek == 0) delay(15_000L)
+
+                        while (true) {
+                            when (
+                                val hasil = authRepository.login(
+                                    usernamePengajuan,
+                                    lastPassword
+                                )
+                            ) {
+                                is AuthResult.Success -> {
+                                    // Pemeriksaan status menggunakan endpoint login.
+                                    // Sesi dashboard dimulai saat pengguna login sendiri.
+                                    authRepository.logout()
+
+                                    simpanPengajuan(
+                                        nama = hasil.data.nama_lengkap ?: namaPengajuan,
+                                        username = hasil.data.username,
+                                        whatsapp = whatsappPengajuan,
+                                        status = "AKTIF"
+                                    )
+                                    lastPassword = ""
+                                    break
+                                }
+
+                                is AuthResult.PendingActivation -> {
+                                    // Server masih menyatakan pengajuan menunggu.
+                                }
+
+                                is AuthResult.Error -> {
+                                    // Pertahankan status terakhir jika koneksi gagal.
+                                    pesan = hasil.message
+                                    break
+                                }
+                            }
+
+                            delay(15_000L)
+                        }
+                    }
+
+                    PendingActivationScreen(
+                        nama = namaPengajuan,
+                        username = usernamePengajuan,
+                        whatsapp = whatsappPengajuan,
+                        statusAktivasi = statusAktivasiAkun,
+                        onCekStatus = {
+                            if (lastPassword.isBlank()) {
+                                kembaliKeLogin()
+                                pesan = "Masukkan username dan kata sandi untuk memeriksa aktivasi akun."
+                            } else {
+                                permintaanCek++
+                            }
+                        },
+                        onMasuk = kembaliKeLogin
+                    )
+                }
 
                 "produksi", "penjualan" -> {
                     val role = layar
@@ -711,10 +852,17 @@ private fun DashboardProduksiSirabas(
                             beratInput = b.berat_input_kg?.toBigDecimal() ?: java.math.BigDecimal.ZERO,
                             rincian = RincianHasilProduksiUi(
                                 hasilUtama = b.hasil_utama.orEmpty().map { hu ->
+                                    val kodeProduk = hu.kode_produk.orEmpty().trim()
+                                    val produk = katalogProduk.firstOrNull { item ->
+                                        item.kode.trim().equals(kodeProduk, ignoreCase = true)
+                                    }
+
                                     HasilUtamaProduksiUi(
-                                        namaProduk = hu.kode_produk ?: "Produk",
-                                        kemasan = "karung",
-                                        beratKg = hu.berat_kg?.toBigDecimal() ?: java.math.BigDecimal.ZERO
+                                        namaProduk = produk?.nama
+                                            ?: kodeProduk.ifBlank { "Produk belum dikenali" },
+                                        kemasan = produk?.kemasan.orEmpty(),
+                                        beratKg = hu.berat_kg?.toBigDecimal()
+                                            ?: java.math.BigDecimal.ZERO
                                     )
                                 },
                                 hasilSamping = b.hasil_samping.orEmpty().map { hs ->
@@ -753,26 +901,33 @@ private fun DashboardProduksiSirabas(
             usernamePanduan = profil.username,
             dataBahanBaku = daftarBahan,
             dataBatch = daftarBatch,
-            onSimpanBahanBaku = { b ->
+            onSimpanBahanBaku = { b, selesai ->
                 scope.launch {
-                    val req = com.stb.sirabas.data.remote.RawMaterialRequest(
-                        tanggal = b.tanggal,
-                        jenis = b.jenis,
-                        supplier = b.supplier,
-                        asal_daerah = b.asalDaerah,
-                        berat_masuk_kg = b.beratKg,
-                        kadar_air = b.kadarAir,
-                        derajat_sosoh = b.derajatSosoh,
-                        broken = b.broken
-                    )
-                    when (val res = produksiRepository.createRawMaterial(req)) {
-                        is ApiResult.Success -> {
-                            onPesan("Bahan baku ${res.data.nomor_penerimaan} tersimpan di server.")
-                            loadData()
+                    try {
+                        val req = com.stb.sirabas.data.remote.RawMaterialRequest(
+                            tanggal = b.tanggal,
+                            jenis = b.jenis,
+                            supplier = b.supplier,
+                            asal_daerah = b.asalDaerah,
+                            berat_masuk_kg = b.beratKg,
+                            kadar_air = b.kadarAir,
+                            derajat_sosoh = b.derajatSosoh,
+                            broken = b.broken
+                        )
+                        when (val res = produksiRepository.createRawMaterial(req)) {
+                            is ApiResult.Success -> {
+                                selesai(true)
+                                onPesan("Bahan baku ${res.data.nomor_penerimaan} tersimpan di server.")
+                                loadData()
+                            }
+                            is ApiResult.Error -> {
+                                selesai(false)
+                                onPesan(parseApiErrorMessage(res.message))
+                            }
                         }
-                        is ApiResult.Error -> {
-                            onPesan(parseApiErrorMessage(res.message))
-                        }
+                    } catch (e: java.io.IOException) {
+                        selesai(false)
+                        onPesan("Koneksi terputus. Periksa riwayat penerimaan sebelum mencoba lagi.")
                     }
                 }
             },
@@ -792,7 +947,11 @@ private fun DashboardProduksiSirabas(
                         },
                         hasil_samping = batch.rincian.hasilSamping.map { hs ->
                             com.stb.sirabas.data.remote.SideOutputRequest(
-                                nama_produk = hs.namaProduk,
+                                nama_produk = when {
+                                    hs.namaProduk.trim().equals("Dedak Halus", ignoreCase = true) -> "Dedak halus"
+                                    hs.namaProduk.trim().equals("Dedak Kasar", ignoreCase = true) -> "Dedak kasar"
+                                    else -> hs.namaProduk.trim()
+                                },
                                 berat_kg = hs.beratKg.toDouble()
                             )
                         }

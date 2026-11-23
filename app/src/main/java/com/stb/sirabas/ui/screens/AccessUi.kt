@@ -58,8 +58,11 @@ internal object AccessColors {
 internal fun AccessPage(
     title: String,
     onBack: () -> Unit,
+    headerTetap: Boolean = false,
     content: @Composable ColumnScope.() -> Unit
 ) {
+    val scrollState = rememberScrollState()
+
     Surface(
         modifier = Modifier.fillMaxSize(),
         color = AccessColors.Background,
@@ -72,63 +75,82 @@ internal fun AccessPage(
                 .imePadding(),
             contentAlignment = Alignment.TopCenter
         ) {
+            val ukuranHalaman = Modifier
+                .widthIn(max = 520.dp)
+                .fillMaxWidth()
+
             Column(
-                modifier = Modifier
-                    .widthIn(max = 520.dp)
-                    .fillMaxWidth()
-                    .verticalScroll(rememberScrollState())
-                    .padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(20.dp)
+                modifier = if (headerTetap) {
+                    ukuranHalaman.fillMaxSize()
+                } else {
+                    ukuranHalaman.verticalScroll(scrollState)
+                }
             ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 20.dp, end = 20.dp, top = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            painter = painterResource(
-                                R.drawable.sirabas_arrow_left
-                            ),
-                            contentDescription = "Kembali",
-                            tint = AccessColors.Green
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                painter = painterResource(
+                                    R.drawable.sirabas_arrow_left
+                                ),
+                                contentDescription = "Kembali",
+                                tint = AccessColors.Green
+                            )
+                        }
+
+                        Text(
+                            text = title,
+                            fontSize = 25.sp,
+                            color = AccessColors.Ink,
+                            fontWeight = FontWeight.Bold
                         )
                     }
 
-                    Text(
-                        text = title,
-                        fontSize = 25.sp,
-                        color = AccessColors.Ink,
-                        fontWeight = FontWeight.Bold
-                    )
+                    HorizontalDivider(color = AccessColors.Border)
                 }
 
-                HorizontalDivider(
-                    color = AccessColors.Border
-                )
+                val areaIsi = if (headerTetap) {
+                    Modifier
+                        .weight(1f)
+                        .fillMaxWidth()
+                        .verticalScroll(scrollState)
+                } else {
+                    Modifier.fillMaxWidth()
+                }
 
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                Column(
+                    modifier = areaIsi.padding(20.dp),
+                    verticalArrangement = Arrangement.spacedBy(20.dp)
                 ) {
-                    Image(
-                        painter = painterResource(R.drawable.logo_stb),
-                        contentDescription = "Logo PT Sri Tani Berkah",
-                        modifier = Modifier.size(40.dp)
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Image(
+                            painter = painterResource(R.drawable.logo_stb),
+                            contentDescription = "Logo PT Sri Tani Berkah",
+                            modifier = Modifier.size(40.dp)
+                        )
 
-                    Text(
-                        text = "SIRABAS",
-                        fontSize = 22.sp,
-                        color = AccessColors.Ink,
-                        fontWeight = FontWeight.SemiBold
-                    )
+                        Text(
+                            text = "SIRABAS",
+                            fontSize = 22.sp,
+                            color = AccessColors.Ink,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+
+                    content()
                 }
-
-                content()
             }
         }
     }
 }
-
 @Composable
 internal fun AccessNotice(
     title: String,

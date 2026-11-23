@@ -25,6 +25,7 @@ import com.stb.sirabas.R
 import com.stb.sirabas.ui.theme.SIRABASTheme
 import java.text.NumberFormat
 import java.util.Locale
+import androidx.compose.foundation.clickable
 
 data class ProductionHomeUi(
     val namaPetugas: String,
@@ -55,6 +56,8 @@ fun ProductionHomeScreen(
         androidx.compose.runtime.remember {
             androidx.compose.runtime.mutableStateMapOf<String, KarungDipindaiUi>()
         },
+    onBukaTugasLabel: () -> Unit = {},
+    onBukaDraf: () -> Unit = {},
     onPeriksaPengiriman: (NotifikasiPesananProduksiUi) -> Unit = {}
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -292,21 +295,21 @@ fun ProductionHomeScreen(
                     ProductionSummaryCard(
                         title = "Tugas label",
                         value = data?.jumlahTugasLabel?.toString() ?: "—",
-                        description = "Label perlu ditindaklanjuti",
+                        description = "Lot yang perlu dilabeli",
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
+                            .clickable(onClick = onBukaTugasLabel)
                     )
 
                     ProductionSummaryCard(
                         title = "Draf penerimaan",
-                        value = data?.let {
-                            "${formatBerat(it.drafPenerimaanKg)} kg"
-                        } ?: "—",
-                        description = "Belum menambah stok",
+                        value = data?.let { "${formatBerat(it.drafPenerimaanKg)} kg" } ?: "—",
+                        description = "Buka atau lanjutkan draf",
                         modifier = Modifier
                             .weight(1f)
                             .fillMaxHeight()
+                            .clickable(onClick = onBukaDraf)
                     )
                 }
 
