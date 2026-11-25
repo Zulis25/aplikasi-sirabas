@@ -41,7 +41,7 @@ fun ProductionMainScreen(
     dataBeranda: ProductionHomeUi? = null,
     dataBahanBaku: List<BahanBakuUi>? = null,
     dataBatch: List<BatchProduksiUi>? = null,
-    onSimpanBahanBaku: ((BahanBakuUi, (Boolean) -> Unit) -> Unit)? = null,
+    onSimpanBahanBaku: ((BahanBakuUi) -> Unit)? = null,
     onSimpanBatch: ((BatchProduksiUi) -> Unit)? = null,
     usernamePanduan: String = "",
     halamanAkun: @Composable () -> Unit = {
@@ -65,8 +65,10 @@ fun ProductionMainScreen(
     val penyimpanState = rememberSaveableStateHolder()
 
     // Data bersama untuk tab Produksi, Beranda, dan Stok.
-    val penerimaanBaru = remember {
-        mutableStateListOf<BahanBakuUi>()
+    val penerimaanBaru = remember(dataBahanBaku) {
+        mutableStateListOf<BahanBakuUi>().apply {
+            if (dataBahanBaku != null) addAll(dataBahanBaku)
+        }
     }
 
     val batchProduksi = remember(dataBatch) {
@@ -144,69 +146,46 @@ fun ProductionMainScreen(
         mutableStateListOf<ProdukReturUi>()
     }
 
-    val prefsProduksi = remember(context, usernamePanduan) {
-        context.getSharedPreferences(
-            "produksi_petugas_$usernamePanduan",
-            android.content.Context.MODE_PRIVATE
-        )
-    }
-
-    var daftarDraf by remember(prefsProduksi) {
-        mutableStateOf(bacaDrafPenerimaan(prefsProduksi))
-    }
-    var labelSelesai by remember(prefsProduksi) {
-        mutableStateOf(
-            prefsProduksi.getStringSet("label_selesai", emptySet())
-                .orEmpty().toSet()
-        )
-    }
-
-    var idDrafAktif by rememberSaveable(usernamePanduan) {
-        mutableStateOf<String?>(null)
-    }
-    var asalForm by rememberSaveable { mutableStateOf("bahan") }
-    var sedangKirimBahan by remember { mutableStateOf(false) }
-
-    val tugasLabel = batchProduksi
-        .distinctBy { it.kode }
-        .filter { it.rincian.hasilUtama.isNotEmpty() && it.kode !in labelSelesai }
-
-    fun bukaDariBeranda(halaman: String) {
-        halamanProduksi = halaman
-        tabTerpilih = ProductionTab.PRODUKSI.name
-    }
-
-    fun bukaFormBahan(asal: String, id: String? = null) {
-        asalForm = asal
-        idDrafAktif = id
-        halamanProduksi = "tambah_bahan"
-    }
-
-    val semuaPenerimaan = (dataBahanBaku.orEmpty() + penerimaanBaru)
-        .distinctBy { it.kode }
+    val semuaPenerimaan = dataBahanBaku.orEmpty() + penerimaanBaru
 
     val lotSiapProduksi = semuaPenerimaan.mapNotNull { bahan ->
-        val sisaKg = sisaLotKg(bahan, batchProduksi)
+        val sisa = sisaLotKg(bahan, batchProduksi)
 
-        if (sisaKg.signum() > 0) {
-            bahan.copy(beratKg = sisaKg.toDouble())
+        if (sisa.signum() > 0) {
+            bahan.copy(beratKg = sisa.toDouble())
         } else {
             null
         }
     }
 
-    val stokTerkiniKg = lotSiapProduksi.sumOf { it.beratKg }
+    val totalBahanTerpakai = batchProduksi.fold(
+        BigDecimal.ZERO
+    ) { jumlah, batch ->
+        jumlah + batch.beratInput
+    }
+
+    val stokAwalKg = dataBeranda?.stokBahanBakuKg
+        ?: dataBahanBaku.orEmpty().sumOf { it.beratKg }
+
+    val stokTerkiniKg = stokAwalKg +
+            penerimaanBaru.sumOf { it.beratKg } -
+            totalBahanTerpakai.toDouble()
 
     val berandaTerbaru = dataBeranda?.let { awal ->
-        val tanggalRingkasan = tanggalBerandaUntukProduksi(awal.tanggal)
-        val penerimaanHariIni = semuaPenerimaan.filter { bahan ->
-            bahan.tanggal == tanggalRingkasan
+        val tanggalRingkasan = tanggalBerandaUntukProduksi(
+            awal.tanggal
+        )
+
+        val penerimaanHariIni = penerimaanBaru.filter {
+            it.tanggal == tanggalRingkasan
         }
 
         awal.copy(
             stokBahanBakuKg = stokTerkiniKg,
-            penerimaanHariIniKg = penerimaanHariIni.sumOf { it.beratKg },
-            jumlahPenerimaan = penerimaanHariIni.size
+            penerimaanHariIniKg = awal.penerimaanHariIniKg +
+                    penerimaanHariIni.sumOf { it.beratKg },
+            jumlahPenerimaan = awal.jumlahPenerimaan +
+                    penerimaanHariIni.size
         )
     }
 
@@ -233,11 +212,7 @@ fun ProductionMainScreen(
 
     fun kembaliDariProduksi() {
         halamanProduksi = when (halamanProduksi) {
-            "tambah_bahan" -> asalForm
-            "draf", "tugas_label" -> {
-                tabTerpilih = ProductionTab.BERANDA.name
-                "menu"
-            }
+            "tambah_bahan" -> "bahan"
             "tambah_retur" -> "retur"
             else -> "menu"
         }
@@ -316,8 +291,6 @@ fun ProductionMainScreen(
                         ProductionHomeScreen(
                             data = berandaTerbaru?.let { beranda ->
                                 beranda.copy(
-                                    jumlahTugasLabel = tugasLabel.size,
-                                    drafPenerimaanKg = daftarDraf.sumOf { it.beratKg },
                                     pesanan = beranda.pesanan.filterNot { pesanan ->
                                         pesanan.nomorPesanan in pengirimanTercatat
                                     }
@@ -325,8 +298,6 @@ fun ProductionMainScreen(
                             },
                             batchProduksi = batchProduksi,
                             hasilPindai = hasilPindai,
-                            onBukaTugasLabel = { bukaDariBeranda("tugas_label") },
-                            onBukaDraf = { bukaDariBeranda("draf") },
                             onPeriksaPengiriman = { pesanan ->
                                 pesananDiperiksa = pesanan
                             }
@@ -373,144 +344,32 @@ fun ProductionMainScreen(
                                     ) {
                                         BahanBakuScreen(
                                             data = semuaPenerimaan,
-                                            onTambah = { bukaFormBahan("bahan") }
+                                            onTambah = {
+                                                halamanProduksi =
+                                                    "tambah_bahan"
+                                            }
                                         )
                                     }
                                 }
                             }
 
-                            "tugas_label" -> {
-                                androidx.compose.foundation.lazy.LazyColumn(
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentPadding = PaddingValues(20.dp),
-                                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    item {
-                                        TextButton(onClick = { kembaliDariProduksi() }) {
-                                            Text("‹ Beranda Produksi")
-                                        }
-                                        Text("Tugas label", style = MaterialTheme.typography.headlineSmall)
-                                        Text("Pilih lot hasil produksi untuk membuka label karungnya.")
-                                    }
-
-                                    if (tugasLabel.isEmpty()) {
-                                        item { Text("Semua tugas label sudah selesai.") }
-                                    }
-
-                                    items(tugasLabel.size, key = { tugasLabel[it].kode }) { index ->
-                                        val batch = tugasLabel[index]
-                                        OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-                                            Column(
-                                                modifier = Modifier.padding(16.dp),
-                                                verticalArrangement = Arrangement.spacedBy(8.dp)
-                                            ) {
-                                                Text("Batch ${batch.kode}", style = MaterialTheme.typography.titleMedium)
-                                                Text("Lot bahan ${batch.kodeBahan} · ${batch.tanggal}")
-                                                DaftarLabelBatch(batch = batch)
-
-                                                TextButton(
-                                                    onClick = {
-                                                        val terbaru = labelSelesai + batch.kode
-                                                        prefsProduksi.edit()
-                                                            .putStringSet("label_selesai", terbaru)
-                                                            .apply()
-                                                        labelSelesai = terbaru
-                                                    }
-                                                ) {
-                                                    Text("Tandai pelabelan selesai")
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
-                            "draf" -> {
-                                androidx.compose.foundation.lazy.LazyColumn(
-                                    modifier = Modifier.fillMaxSize(),
-                                    contentPadding = PaddingValues(20.dp),
-                                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                                ) {
-                                    item {
-                                        TextButton(onClick = { kembaliDariProduksi() }) {
-                                            Text("‹ Beranda Produksi")
-                                        }
-                                        Text("Draf penerimaan", style = MaterialTheme.typography.headlineSmall)
-                                        Text("Lanjutkan isian dan konfirmasi penerimaan saat bahan siap dicatat.")
-                                        Button(onClick = { bukaFormBahan("draf") }) {
-                                            Text("Tambah penerimaan")
-                                        }
-                                    }
-
-                                    if (daftarDraf.isEmpty()) {
-                                        item { Text("Belum ada draf penerimaan.") }
-                                    }
-
-                                    items(daftarDraf.size, key = { daftarDraf[it].id }) { index ->
-                                        val draf = daftarDraf[index]
-                                        OutlinedCard(modifier = Modifier.fillMaxWidth()) {
-                                            Column(modifier = Modifier.padding(16.dp)) {
-                                                Text(
-                                                    draf.supplier.ifBlank { "Pemasok belum diisi" },
-                                                    style = MaterialTheme.typography.titleMedium
-                                                )
-                                                Text("${draf.jenis} · ${draf.tanggal}")
-                                                Text(
-                                                    if (draf.berat.isBlank()) "Berat belum diisi"
-                                                    else "Berat ${draf.berat} kg"
-                                                )
-                                                TextButton(onClick = { bukaFormBahan("draf", draf.id) }) {
-                                                    Text("Lanjutkan draf")
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-
                             "tambah_bahan" -> {
-                                val draf = daftarDraf.firstOrNull { it.id == idDrafAktif }
-
                                 FormBahanBakuScreen(
                                     kodeBaru = kodeBahanBerikutnya,
-                                    drafAwal = draf,
-                                    sedangMenyimpan = sedangKirimBahan,
-                                    onKembali = { halamanProduksi = asalForm },
-                                    onSimpanDraf = { isian ->
-                                        val terbaru = listOf(isian) + daftarDraf.filterNot { it.id == isian.id }
-                                        tulisDrafPenerimaan(prefsProduksi, terbaru)
-                                        daftarDraf = terbaru
-                                        idDrafAktif = null
-                                        halamanProduksi = "draf"
+                                    onKembali = {
+                                        halamanProduksi = "bahan"
                                     },
                                     onSimpan = { bahan ->
-                                        if (!sedangKirimBahan) {
-                                            sedangKirimBahan = true
-                                            val idYangDikirim = idDrafAktif
-
-                                            val setelahSimpan: (Boolean) -> Unit = { berhasil ->
-                                                sedangKirimBahan = false
-                                                if (berhasil) {
-                                                    if (idYangDikirim != null) {
-                                                        val terbaru = daftarDraf.filterNot { it.id == idYangDikirim }
-                                                        tulisDrafPenerimaan(prefsProduksi, terbaru)
-                                                        daftarDraf = terbaru
-                                                    }
-                                                    if (halamanProduksi == "tambah_bahan" &&
-                                                        idDrafAktif == idYangDikirim
-                                                    ) {
-                                                        idDrafAktif = null
-                                                        halamanProduksi = "bahan"
-                                                    }
-                                                }
-                                            }
-
+                                        if (
+                                            halamanProduksi ==
+                                            "tambah_bahan"
+                                        ) {
                                             if (onSimpanBahanBaku != null) {
-                                                onSimpanBahanBaku(bahan, setelahSimpan)
+                                                onSimpanBahanBaku(bahan)
                                             } else {
                                                 penerimaanBaru.add(bahan)
-                                                setelahSimpan(true)
                                             }
+                                            halamanProduksi = "bahan"
                                         }
                                     }
                                 )

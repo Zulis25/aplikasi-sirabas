@@ -702,7 +702,10 @@ private fun DashboardPenjualanSirabas(
     }
 
     LaunchedEffect(Unit) {
-        loadData()
+        while (true) {
+            loadData()
+            delay(5000)
+        }
     }
 
     val tren = remember {
@@ -764,12 +767,19 @@ private fun DashboardPenjualanSirabas(
                         )
                         when (val res = penjualanRepository.createInvoice(req)) {
                             is ApiResult.Success -> {
+                                if (newInv.jumlahDibayar > 0) {
+                                    penjualanRepository.addPayment(
+                                        nomorInvoice = newInv.nomor,
+                                        jumlah = newInv.jumlahDibayar,
+                                        metodeBayar = newInv.metodePembayaran ?: "TUNAI"
+                                    )
+                                }
                                 onInvoiceBaru(newInv)
                                 onPesan("Invoice ${newInv.nomor} berhasil dibuat di server.")
                                 loadData()
                             }
                             is ApiResult.Error -> {
-                                onPesan(res.message)
+                                onPesan(parseApiErrorMessage(res.message))
                             }
                         }
                     }
@@ -782,7 +792,33 @@ private fun DashboardPenjualanSirabas(
                 namaPt = profil.namaPerusahaan,
                 alamatPt = profil.alamatPerusahaan,
                 teleponPt = profil.teleponPerusahaan,
-                onInvoiceDiperbarui = onInvoiceDiperbarui
+                onInvoiceDiperbarui = { invoiceBaru ->
+                    val indeks = daftarInvoice.indexOfFirst { it.nomor == invoiceBaru.nomor }
+                    if (indeks >= 0) {
+                        val invoiceLama = daftarInvoice[indeks]
+                        val selisih = invoiceBaru.jumlahDibayar - invoiceLama.jumlahDibayar
+                        if (selisih > 0) {
+                            scope.launch {
+                                when (val res = penjualanRepository.addPayment(
+                                    nomorInvoice = invoiceBaru.nomor,
+                                    jumlah = selisih,
+                                    metodeBayar = invoiceBaru.metodePembayaran ?: "TUNAI"
+                                )) {
+                                    is ApiResult.Success -> {
+                                        daftarInvoice[indeks] = invoiceBaru
+                                        onPesan("Pembayaran untuk ${invoiceBaru.nomor} berhasil dicatat di server.")
+                                        loadData()
+                                    }
+                                    is ApiResult.Error -> {
+                                        onPesan(parseApiErrorMessage(res.message))
+                                    }
+                                }
+                            }
+                        } else {
+                            daftarInvoice[indeks] = invoiceBaru
+                        }
+                    }
+                }
             )
         },
         laporan = {
@@ -882,7 +918,10 @@ private fun DashboardProduksiSirabas(
     }
 
     LaunchedEffect(Unit) {
-        loadData()
+        while (true) {
+            loadData()
+            delay(5000)
+        }
     }
 
     val tanggal = remember {
@@ -901,7 +940,7 @@ private fun DashboardProduksiSirabas(
             usernamePanduan = profil.username,
             dataBahanBaku = daftarBahan,
             dataBatch = daftarBatch,
-            onSimpanBahanBaku = { b, selesai ->
+            onSimpanBahanBaku = { b ->
                 scope.launch {
                     try {
                         val req = com.stb.sirabas.data.remote.RawMaterialRequest(
@@ -916,17 +955,14 @@ private fun DashboardProduksiSirabas(
                         )
                         when (val res = produksiRepository.createRawMaterial(req)) {
                             is ApiResult.Success -> {
-                                selesai(true)
                                 onPesan("Bahan baku ${res.data.nomor_penerimaan} tersimpan di server.")
                                 loadData()
                             }
                             is ApiResult.Error -> {
-                                selesai(false)
                                 onPesan(parseApiErrorMessage(res.message))
                             }
                         }
                     } catch (e: java.io.IOException) {
-                        selesai(false)
                         onPesan("Koneksi terputus. Periksa riwayat penerimaan sebelum mencoba lagi.")
                     }
                 }

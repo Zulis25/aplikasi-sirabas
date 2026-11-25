@@ -37,31 +37,28 @@ private fun cariProdukDariQr(
     kode: String,
     batchProduksi: List<BatchProduksiUi>
 ): HasilUtamaProduksiUi? {
-    val cocok = polaKodeKarung.matchEntire(kode) ?: return null
-    val (kodeBatch, teksProduk, teksKarung) = cocok.destructured
+    val cleanKode = kode.trim()
 
-    val nomorProduk = teksProduk.toIntOrNull() ?: return null
-    val nomorKarung = teksKarung.toBigIntegerOrNull() ?: return null
-    if (nomorProduk <= 0 || nomorKarung < BigInteger.ONE) return null
+    // 1. Format dari Server API: {kodeBatch}-K{nomorKarung} (misal: PR/002-K0001)
+    val matchApi = Regex("""^(.+)-K(\d+)$""").matchEntire(cleanKode)
+    if (matchApi != null) {
+        val (kodeBatch, _) = matchApi.destructured
+        val batch = batchProduksi.firstOrNull { it.kode == kodeBatch }
+        if (batch != null) {
+            return batch.rincian.hasilUtama.firstOrNull()
+        }
+    }
 
-    // Terima hanya bentuk kode yang benar-benar dibuat oleh pencetak label.
-    val kodeAsli = "$kodeBatch-P${nomorProduk.toString().padStart(2, '0')}" +
-            "-K${nomorKarung.toString().padStart(3, '0')}"
-    if (kode != kodeAsli) return null
+    // 2. Format Lokal: {kodeBatch}-P{nomorProduk}-K{nomorKarung}
+    val matchLegacy = Regex("""^(.+)-P(\d+)-K(\d+)$""").matchEntire(cleanKode)
+    if (matchLegacy != null) {
+        val (kodeBatch, teksProduk, _) = matchLegacy.destructured
+        val nomorProduk = teksProduk.toIntOrNull() ?: return null
+        val batch = batchProduksi.firstOrNull { it.kode == kodeBatch } ?: return null
+        return batch.rincian.hasilUtama.getOrNull(nomorProduk - 1)
+    }
 
-    val batch = batchProduksi.singleOrNull { it.kode == kodeBatch } ?: return null
-    val produk = batch.rincian.hasilUtama.getOrNull(nomorProduk - 1) ?: return null
-
-    val beratKemasan = polaBeratKarung.find(produk.kemasan.trim())
-        ?.groupValues?.get(1)
-        ?.replace(',', '.')
-        ?.toBigDecimalOrNull()
-        ?: return null
-
-    if (beratKemasan.signum() <= 0) return null
-    val jumlahPenuh = produk.beratKg.divideToIntegralValue(beratKemasan).toBigInteger()
-
-    return produk.takeIf { nomorKarung <= jumlahPenuh }
+    return null
 }
 
 @Composable
