@@ -129,7 +129,8 @@ data class ProductDto(
 
 data class InvoiceItemRequest(
     val kode_produk: String,
-    val jumlah: Int
+    val jumlah: Int,
+    val harga: Long? = null
 )
 
 data class InvoiceRequest(
@@ -158,7 +159,7 @@ data class InvoiceItemDto(
     val nama_produk: String? = null,
     val kemasan: String? = null,
     val jumlah: Int = 0,
-    val harga_satuan: Long = 0,
+    val harga_satuan: Long? = null,
     val harga: Long? = null,
     val subtotal: Long? = null
 )

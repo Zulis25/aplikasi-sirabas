@@ -675,7 +675,11 @@ private fun DashboardPenjualanSirabas(
                     is ApiResult.Success -> {
                         val invs = resInv.data.orEmpty().map { inv ->
                             val itemsMapped = inv.items.orEmpty().map { item ->
-                                val price = item.harga ?: item.harga_satuan ?: item.subtotal?.let { if (item.jumlah > 0) it / item.jumlah else 0L } ?: 0L
+                                val price = item.harga?.takeIf { it > 0 }
+                                    ?: item.harga_satuan?.takeIf { it > 0 }
+                                    ?: item.subtotal?.let { if (item.jumlah > 0) it / item.jumlah else null }
+                                    ?: 0L
+
                                 ItemPesananUi(
                                     produk = ProdukPenjualanUi(
                                         kode = item.kode_produk.orEmpty(),
@@ -776,7 +780,8 @@ private fun DashboardPenjualanSirabas(
                             items = newInv.daftarItem.map { itm ->
                                 com.stb.sirabas.data.remote.InvoiceItemRequest(
                                     kode_produk = itm.produk.kode,
-                                    jumlah = itm.jumlah
+                                    jumlah = itm.jumlah,
+                                    harga = itm.hargaSatuan
                                 )
                             }
                         )
