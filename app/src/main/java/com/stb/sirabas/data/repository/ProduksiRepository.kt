@@ -58,6 +58,33 @@ class ProduksiRepository(private val api: SirabasApi) {
         }
     }
 
+    suspend fun getProductionOrders(): ApiResult<List<com.stb.sirabas.data.remote.ProductionOrderDto>> {
+        return try {
+            val response = api.getProductionOrders()
+            if (response.isSuccessful && response.body() != null) {
+                ApiResult.Success(response.body()!!)
+            } else {
+                ApiResult.Error("Gagal mengambil pesanan produksi (${response.code()})", response.code())
+            }
+        } catch (e: Exception) {
+            ApiResult.Error("Gagal terhubung ke server: ${e.localizedMessage}")
+        }
+    }
+
+    suspend fun scanOrderLabel(nomorInvoice: String, kodeKarung: String): ApiResult<Map<String, Any>> {
+        return try {
+            val response = api.scanOrderLabel(nomorInvoice, com.stb.sirabas.data.remote.ScanLabelRequest(kodeKarung))
+            if (response.isSuccessful && response.body() != null) {
+                ApiResult.Success(response.body()!!)
+            } else {
+                val err = response.errorBody()?.string().orEmpty()
+                ApiResult.Error("Gagal memindai QR karung: $err", response.code())
+            }
+        } catch (e: Exception) {
+            ApiResult.Error("Gagal terhubung ke server: ${e.localizedMessage}")
+        }
+    }
+
     suspend fun createProductionBatch(request: ProductionRequest): ApiResult<Unit> {
         return try {
             val response = api.createProductionBatch(request)

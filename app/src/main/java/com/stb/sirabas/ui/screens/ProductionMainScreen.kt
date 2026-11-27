@@ -65,16 +65,12 @@ fun ProductionMainScreen(
     val penyimpanState = rememberSaveableStateHolder()
 
     // Data bersama untuk tab Produksi, Beranda, dan Stok.
-    val penerimaanBaru = remember(dataBahanBaku) {
-        mutableStateListOf<BahanBakuUi>().apply {
-            if (dataBahanBaku != null) addAll(dataBahanBaku)
-        }
+    val penerimaanBaru = remember {
+        mutableStateListOf<BahanBakuUi>()
     }
 
-    val batchProduksi = remember(dataBatch) {
-        mutableStateListOf<BatchProduksiUi>().apply {
-            if (dataBatch != null) addAll(dataBatch)
-        }
+    val batchProduksi = remember {
+        mutableStateListOf<BatchProduksiUi>()
     }
 
     val hasilPindai = remember {
@@ -148,8 +144,10 @@ fun ProductionMainScreen(
 
     val semuaPenerimaan = dataBahanBaku.orEmpty() + penerimaanBaru
 
+    val semuaBatch = (dataBatch.orEmpty() + batchProduksi).distinctBy { it.kode }
+
     val lotSiapProduksi = semuaPenerimaan.mapNotNull { bahan ->
-        val sisa = sisaLotKg(bahan, batchProduksi)
+        val sisa = sisaLotKg(bahan, semuaBatch)
 
         if (sisa.signum() > 0) {
             bahan.copy(beratKg = sisa.toDouble())
@@ -158,36 +156,18 @@ fun ProductionMainScreen(
         }
     }
 
-    val totalBahanTerpakai = batchProduksi.fold(
+    val totalBahanTerpakai = semuaBatch.fold(
         BigDecimal.ZERO
     ) { jumlah, batch ->
         jumlah + batch.beratInput
     }
 
-    val stokAwalKg = dataBeranda?.stokBahanBakuKg
-        ?: dataBahanBaku.orEmpty().sumOf { it.beratKg }
+    val stokTerkiniKg = semuaPenerimaan.sumOf { it.sisaLot }
 
-    val stokTerkiniKg = stokAwalKg +
-            penerimaanBaru.sumOf { it.beratKg } -
-            totalBahanTerpakai.toDouble()
-
-    val berandaTerbaru = dataBeranda?.let { awal ->
-        val tanggalRingkasan = tanggalBerandaUntukProduksi(
-            awal.tanggal
-        )
-
-        val penerimaanHariIni = penerimaanBaru.filter {
-            it.tanggal == tanggalRingkasan
-        }
-
-        awal.copy(
-            stokBahanBakuKg = stokTerkiniKg,
-            penerimaanHariIniKg = awal.penerimaanHariIniKg +
-                    penerimaanHariIni.sumOf { it.beratKg },
-            jumlahPenerimaan = awal.jumlahPenerimaan +
-                    penerimaanHariIni.size
-        )
-    }
+    val berandaTerbaru = dataBeranda?.copy(
+        stokBahanBakuKg = stokTerkiniKg,
+        jumlahTugasLabel = semuaBatch.size
+    )
 
     val nomorBahanTerbesar = semuaPenerimaan
         .mapNotNull {
@@ -296,8 +276,16 @@ fun ProductionMainScreen(
                                     }
                                 )
                             },
-                            batchProduksi = batchProduksi,
+                            batchProduksi = semuaBatch,
                             hasilPindai = hasilPindai,
+                            onBukaTugasLabel = {
+                                tabTerpilih = ProductionTab.PRODUKSI.name
+                                halamanProduksi = "hasil"
+                            },
+                            onBukaDraf = {
+                                tabTerpilih = ProductionTab.PRODUKSI.name
+                                halamanProduksi = "bahan"
+                            },
                             onPeriksaPengiriman = { pesanan ->
                                 pesananDiperiksa = pesanan
                             }
@@ -525,7 +513,7 @@ fun ProductionMainScreen(
                         StokBahanBakuScreen(
                             stokTersediaKg = stokTerkiniKg,
                             penerimaanBaru = semuaPenerimaan,
-                            batchProduksi = batchProduksi,
+                            batchProduksi = semuaBatch,
                             kodeSudahKeluar = kodeSudahKeluar
                         )
                     }
@@ -533,7 +521,7 @@ fun ProductionMainScreen(
                     ProductionTab.LAPORAN.name -> {
                         LaporanProduksiDenganExcel(
                             penerimaan = semuaPenerimaan,
-                            batchProduksi = batchProduksi
+                            batchProduksi = semuaBatch
                         )
                     }
 

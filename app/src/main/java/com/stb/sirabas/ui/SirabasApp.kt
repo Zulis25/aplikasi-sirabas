@@ -39,6 +39,8 @@ import com.stb.sirabas.data.repository.ProduksiRepository
 import kotlinx.coroutines.launch
 
 private const val PERUSAHAAN = "PT. Sri Tani Berkah"
+private const val ALAMAT_KANTOR = "Jl. Poros Makassar - Maros Km. 20, Kab. Maros, Sulawesi Selatan"
+private const val TELEPON_KANTOR = "0812-4211-8888"
 
 @Composable
 fun SirabasApp() {
@@ -521,9 +523,9 @@ private fun MenuAkunSirabas(
                         username = p.username,
                         nomorWhatsApp = p.nomor_whatsapp ?: "",
                         role = roleLabel,
-                        namaPerusahaan = p.nama_perusahaan ?: "PT. Sri Tani Berkah",
-                        alamatPerusahaan = "Kantor Pusat",
-                        teleponPerusahaan = p.nomor_whatsapp ?: ""
+                        namaPerusahaan = p.nama_perusahaan?.ifBlank { null } ?: PERUSAHAAN,
+                        alamatPerusahaan = ALAMAT_KANTOR,
+                        teleponPerusahaan = TELEPON_KANTOR
                     )
                 }
                 else -> {}
@@ -556,9 +558,9 @@ private fun MenuAkunSirabas(
                                 username = p.username,
                                 nomorWhatsApp = p.nomor_whatsapp ?: "",
                                 role = roleLabel,
-                                namaPerusahaan = p.nama_perusahaan ?: "PT. Sri Tani Berkah",
-                                alamatPerusahaan = "Kantor Pusat",
-                                teleponPerusahaan = p.nomor_whatsapp ?: ""
+                                namaPerusahaan = p.nama_perusahaan?.ifBlank { null } ?: PERUSAHAAN,
+                                alamatPerusahaan = ALAMAT_KANTOR,
+                                teleponPerusahaan = TELEPON_KANTOR
                             )
                             halaman = "akun"
                             onPesan("Profil berhasil diperbarui di server.")
@@ -622,14 +624,23 @@ private fun DashboardPenjualanSirabas(
                         val list = res.data.orEmpty()
                         produkUtama = list.filter { !it.jenis_produk.equals("samping", true) && !it.kemasan.equals("curah", true) }
                             .map { p ->
-                                val foto = when (p.kode) {
-                                    "PREMIUM-5" -> R.drawable.premium_5kg
-                                    "PREMIUM-10" -> R.drawable.premium_10kg
-                                    "PREMIUM-25-HIJAU" -> R.drawable.premium_25kg_hijau
-                                    "PREMIUM-25-BIRU" -> R.drawable.premium_25kg_biru
-                                    "MEDIUM-25" -> R.drawable.medium_25kg
-                                    "BERAS-50" -> R.drawable.beras_50kg
-                                    else -> null
+                                val foto = when {
+                                    p.kode.contains("PREMIUM-5", ignoreCase = true) -> R.drawable.premium_5kg
+                                    p.kode.contains("PREMIUM-10", ignoreCase = true) -> R.drawable.premium_10kg
+                                    p.kode.contains("PREMIUM-25-HIJAU", ignoreCase = true) -> R.drawable.premium_25kg_hijau
+                                    p.kode.contains("PREMIUM-25-BIRU", ignoreCase = true) -> R.drawable.premium_25kg_biru
+                                    p.kode.contains("MEDIUM-25", ignoreCase = true) -> R.drawable.medium_25kg
+                                    p.kode.contains("BERAS-50", ignoreCase = true) -> R.drawable.beras_50kg
+                                    p.nama.contains("PREMIUM", ignoreCase = true) && p.kemasan.contains("5") -> R.drawable.premium_5kg
+                                    p.nama.contains("PREMIUM", ignoreCase = true) && p.kemasan.contains("10") -> R.drawable.premium_10kg
+                                    p.nama.contains("PREMIUM", ignoreCase = true) && p.kemasan.contains("hijau") -> R.drawable.premium_25kg_hijau
+                                    p.nama.contains("PREMIUM", ignoreCase = true) && p.kemasan.contains("biru") -> R.drawable.premium_25kg_biru
+                                    p.nama.contains("MEDIUM", ignoreCase = true) -> R.drawable.medium_25kg
+                                    p.nama.contains("BERAS", ignoreCase = true) && p.kemasan.contains("50") -> R.drawable.beras_50kg
+                                    else -> R.drawable.premium_25kg_hijau
+                                }
+                                val imgUrl = p.gambar_path?.takeIf { it.isNotBlank() }?.let { path ->
+                                    if (path.startsWith("http")) path else "https://aryaganteng.sovereigns.my.id$path"
                                 }
                                 ProdukPenjualanUi(
                                     kode = p.kode,
@@ -638,7 +649,8 @@ private fun DashboardPenjualanSirabas(
                                     satuanJual = "karung",
                                     stokTersedia = p.stok_tersedia,
                                     hargaKatalog = p.harga_katalog,
-                                    fotoRes = foto
+                                    fotoRes = foto,
+                                    fotoUrl = imgUrl
                                 )
                             }
 
@@ -662,25 +674,28 @@ private fun DashboardPenjualanSirabas(
                 when (val resInv = penjualanRepository.getInvoices()) {
                     is ApiResult.Success -> {
                         val invs = resInv.data.orEmpty().map { inv ->
+                            val itemsMapped = inv.items.orEmpty().map { item ->
+                                val price = item.harga ?: item.harga_satuan ?: item.subtotal?.let { if (item.jumlah > 0) it / item.jumlah else 0L } ?: 0L
+                                ItemPesananUi(
+                                    produk = ProdukPenjualanUi(
+                                        kode = item.kode_produk.orEmpty(),
+                                        nama = item.nama_produk.orEmpty().ifBlank { item.kode_produk.orEmpty() },
+                                        kemasan = item.kemasan.orEmpty().ifBlank { "karung" },
+                                        satuanJual = "karung",
+                                        stokTersedia = 99,
+                                        hargaKatalog = price
+                                    ),
+                                    jumlah = item.jumlah,
+                                    hargaSatuan = price
+                                )
+                            }
+                            val paid = if (inv.jumlah_dibayar > 0) inv.jumlah_dibayar else inv.pembayaran.orEmpty().sumOf { it.jumlah }
                             InvoicePenjualanUi(
                                 nomor = inv.nomor_invoice,
                                 tanggal = inv.tanggal.orEmpty(),
                                 pelanggan = inv.pelanggan.orEmpty(),
-                                daftarItem = inv.items.orEmpty().map { item ->
-                                    ItemPesananUi(
-                                        produk = ProdukPenjualanUi(
-                                            kode = item.kode_produk.orEmpty(),
-                                            nama = item.nama_produk.orEmpty(),
-                                            kemasan = item.kemasan.orEmpty(),
-                                            satuanJual = "karung",
-                                            stokTersedia = 99,
-                                            hargaKatalog = item.harga_satuan
-                                        ),
-                                        jumlah = item.jumlah,
-                                        hargaSatuan = item.harga_satuan
-                                    )
-                                },
-                                jumlahDibayar = inv.jumlah_dibayar,
+                                daftarItem = itemsMapped,
+                                jumlahDibayar = paid,
                                 metodePembayaran = inv.pembayaran.orEmpty().lastOrNull()?.metode_bayar,
                                 riwayatPembayaran = inv.pembayaran.orEmpty().map { pay ->
                                     PembayaranInvoiceUi(
@@ -842,6 +857,7 @@ private fun DashboardProduksiSirabas(
 ) {
     var daftarBahan by remember { mutableStateOf<List<BahanBakuUi>>(emptyList()) }
     var daftarBatch by remember { mutableStateOf<List<BatchProduksiUi>>(emptyList()) }
+    var pesananProduksi by remember { mutableStateOf<List<ProductionOrderUi>>(emptyList()) }
     var katalogProduk by remember { mutableStateOf<List<com.stb.sirabas.data.remote.ProductDto>>(emptyList()) }
     var isRefreshing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -856,6 +872,32 @@ private fun DashboardProduksiSirabas(
                 is ApiResult.Error -> {}
             }
 
+            when (val resOrders = produksiRepository.getProductionOrders()) {
+                is ApiResult.Success -> {
+                    val ordersMap = resOrders.data.orEmpty().groupBy { it.nomor_invoice }
+                    pesananProduksi = ordersMap.map { (nomorInvoice, orderItems) ->
+                        val first = orderItems.first()
+                        val item1 = orderItems.firstOrNull()
+                        val (namaProd, kemasanProd) = uraiKodeProduk(item1?.kode_produk.orEmpty(), katalogProduk)
+                        val beratKg = (item1?.kemasan ?: kemasanProd)
+                            .trim()
+                            .substringBefore(" ")
+                            .toIntOrNull() ?: 25
+
+                        ProductionOrderUi(
+                            nomorPesanan = nomorInvoice,
+                            namaPelanggan = first.pelanggan.orEmpty().ifBlank { "Pelanggan" },
+                            namaProduk = item1?.nama_produk ?: namaProd,
+                            beratPerKarungKg = beratKg,
+                            jumlahKarung = item1?.jumlah_sisa ?: item1?.jumlah_diminta ?: 1,
+                            kemasan = item1?.kemasan ?: kemasanProd,
+                            tanggalPesanan = first.tanggal ?: first.dibuat_pada?.take(10) ?: "Hari ini"
+                        )
+                    }
+                }
+                is ApiResult.Error -> {}
+            }
+
             when (val res = produksiRepository.getRawMaterials()) {
                 is ApiResult.Success -> {
                     daftarBahan = res.data.orEmpty().map { raw ->
@@ -865,7 +907,8 @@ private fun DashboardProduksiSirabas(
                             jenis = raw.jenis,
                             supplier = raw.supplier,
                             asalDaerah = raw.asal_daerah,
-                            beratKg = raw.berat_masuk_kg,
+                            beratKg = raw.berat_masuk_kg ?: 0.0,
+                            sisaKg = raw.sisa_kg,
                             kadarAir = raw.kadar_air,
                             derajatSosoh = raw.derajat_sosoh,
                             broken = raw.broken,
@@ -881,32 +924,58 @@ private fun DashboardProduksiSirabas(
             when (val resBatch = produksiRepository.getProductionBatches()) {
                 is ApiResult.Success -> {
                     daftarBatch = resBatch.data.orEmpty().map { b ->
+                        val listUtama = b.hasil_utama.orEmpty()
+                        val totalUtama = b.total_hasil_utama_kg ?: 0.0
+
+                        val hasilUtamaParsed = if (listUtama.isEmpty() && totalUtama > 0) {
+                            listOf(
+                                HasilUtamaProduksiUi(
+                                    namaProduk = "Beras Premium",
+                                    kemasan = "25 kg hijau",
+                                    beratKg = totalUtama.toBigDecimal()
+                                )
+                            )
+                        } else {
+                            listUtama.map { hu ->
+                                val kodeProduk = hu.kode_produk.orEmpty().trim()
+                                val (namaProduk, kemasan) = uraiKodeProduk(kodeProduk, katalogProduk)
+
+                                HasilUtamaProduksiUi(
+                                    namaProduk = namaProduk,
+                                    kemasan = if (kemasan.isBlank()) "25 kg" else kemasan,
+                                    beratKg = hu.berat_kg?.toBigDecimal()
+                                        ?: java.math.BigDecimal.ZERO
+                                )
+                            }
+                        }
+
+                        val listSamping = b.hasil_samping.orEmpty()
+                        val totalSamping = b.total_hasil_samping_kg ?: 0.0
+
+                        val hasilSampingParsed = if (listSamping.isEmpty() && totalSamping > 0) {
+                            listOf(
+                                HasilSampingProduksiUi(
+                                    namaProduk = "Dedak halus",
+                                    beratKg = totalSamping.toBigDecimal()
+                                )
+                            )
+                        } else {
+                            listSamping.map { hs ->
+                                HasilSampingProduksiUi(
+                                    namaProduk = hs.nama_produk ?: "Dedak halus",
+                                    beratKg = hs.berat_kg?.toBigDecimal() ?: java.math.BigDecimal.ZERO
+                                )
+                            }
+                        }
+
                         BatchProduksiUi(
                             kode = b.kode_batch,
                             tanggal = b.tanggal ?: "",
                             kodeBahan = b.nomor_penerimaan ?: "",
                             beratInput = b.berat_input_kg?.toBigDecimal() ?: java.math.BigDecimal.ZERO,
                             rincian = RincianHasilProduksiUi(
-                                hasilUtama = b.hasil_utama.orEmpty().map { hu ->
-                                    val kodeProduk = hu.kode_produk.orEmpty().trim()
-                                    val produk = katalogProduk.firstOrNull { item ->
-                                        item.kode.trim().equals(kodeProduk, ignoreCase = true)
-                                    }
-
-                                    HasilUtamaProduksiUi(
-                                        namaProduk = produk?.nama
-                                            ?: kodeProduk.ifBlank { "Produk belum dikenali" },
-                                        kemasan = produk?.kemasan.orEmpty(),
-                                        beratKg = hu.berat_kg?.toBigDecimal()
-                                            ?: java.math.BigDecimal.ZERO
-                                    )
-                                },
-                                hasilSamping = b.hasil_samping.orEmpty().map { hs ->
-                                    HasilSampingProduksiUi(
-                                        namaProduk = hs.nama_produk ?: "Samping",
-                                        beratKg = hs.berat_kg?.toBigDecimal() ?: java.math.BigDecimal.ZERO
-                                    )
-                                }
+                                hasilUtama = hasilUtamaParsed,
+                                hasilSamping = hasilSampingParsed
                             )
                         )
                     }
@@ -1003,40 +1072,49 @@ private fun DashboardProduksiSirabas(
                     }
                 }
             },
-            dataBeranda = ProductionHomeUi(
-                namaPetugas = profil.namaLengkap,
-                tanggal = tanggal,
-                penerimaanHariIniKg = daftarBahan.sumOf { it.beratKg },
-                jumlahPenerimaan = daftarBahan.size,
-                stokBahanBakuKg = daftarBahan.sumOf { it.beratKg },
-                jumlahTugasLabel = daftarBatch.size,
-                drafPenerimaanKg = 0.0,
-                pesanan = daftarInvoice.flatMap { invoice ->
-                    invoice.daftarItem.mapNotNull { item ->
-                        val produk = item.produk
+            dataBeranda = run {
+                val hariIniIso = SimpleDateFormat("yyyy-MM-dd", Locale.ROOT).format(Date())
+                val penerimaanHariIni = daftarBahan.filter { it.tanggal == hariIniIso }
 
-                        if (!produk.satuanJual.equals("karung", ignoreCase = true)) {
-                            return@mapNotNull null
+                ProductionHomeUi(
+                    namaPetugas = profil.namaLengkap,
+                    tanggal = tanggal,
+                    penerimaanHariIniKg = penerimaanHariIni.sumOf { it.beratKg },
+                    jumlahPenerimaan = penerimaanHariIni.size,
+                    stokBahanBakuKg = daftarBahan.sumOf { it.sisaLot },
+                    jumlahTugasLabel = daftarBatch.size,
+                    drafPenerimaanKg = 0.0,
+                    pesanan = if (pesananProduksi.isNotEmpty()) {
+                        pesananProduksi
+                    } else {
+                        daftarInvoice.flatMap { invoice ->
+                            invoice.daftarItem.mapNotNull { item ->
+                                val produk = item.produk
+
+                                if (!produk.satuanJual.equals("karung", ignoreCase = true)) {
+                                    return@mapNotNull null
+                                }
+
+                                val beratKg = produk.kemasan
+                                    .trim()
+                                    .substringBefore(" ")
+                                    .toIntOrNull()
+                                    ?: return@mapNotNull null
+
+                                ProductionOrderUi(
+                                    nomorPesanan = invoice.nomor,
+                                    namaPelanggan = invoice.pelanggan,
+                                    namaProduk = produk.nama,
+                                    beratPerKarungKg = beratKg,
+                                    jumlahKarung = item.jumlah,
+                                    kemasan = produk.kemasan,
+                                    tanggalPesanan = invoice.tanggal
+                                )
+                            }
                         }
-
-                        val beratKg = produk.kemasan
-                            .trim()
-                            .substringBefore(" ")
-                            .toIntOrNull()
-                            ?: return@mapNotNull null
-
-                        ProductionOrderUi(
-                            nomorPesanan = invoice.nomor,
-                            namaPelanggan = invoice.pelanggan,
-                            namaProduk = produk.nama,
-                            beratPerKarungKg = beratKg,
-                            jumlahKarung = item.jumlah,
-                            kemasan = produk.kemasan,
-                            tanggalPesanan = invoice.tanggal
-                        )
                     }
-                }
-            ),
+                )
+            },
             halamanAkun = halamanAkun
         )
     }
@@ -1064,6 +1142,28 @@ private fun cariKodeProdukKatalog(
         cleanNama.contains("MEDIUM", ignoreCase = true) -> "MEDIUM-25"
         cleanNama.contains("BERAS", ignoreCase = true) && cleanKemasan.contains("50") -> "BERAS-50"
         else -> cleanNama.uppercase().replace(" ", "-")
+    }
+}
+
+private fun uraiKodeProduk(
+    kodeProduk: String,
+    katalog: List<com.stb.sirabas.data.remote.ProductDto>
+): Pair<String, String> {
+    val cleanKode = kodeProduk.trim().uppercase()
+    val matched = katalog.firstOrNull { it.kode.trim().equals(cleanKode, ignoreCase = true) }
+    if (matched != null) {
+        return matched.nama to matched.kemasan
+    }
+    return when {
+        cleanKode.contains("PREMIUM-25-HIJAU") -> "Beras Premium" to "25 kg hijau"
+        cleanKode.contains("PREMIUM-25-BIRU") -> "Beras Premium" to "25 kg biru"
+        cleanKode.contains("PREMIUM-5") -> "Beras Premium" to "5 kg"
+        cleanKode.contains("PREMIUM-10") -> "Beras Premium" to "10 kg"
+        cleanKode.contains("MEDIUM-25") -> "Beras Medium" to "25 kg"
+        cleanKode.contains("BERAS-50") -> "Beras" to "50 kg"
+        cleanKode.contains("PREMIUM") -> "Beras Premium" to "25 kg"
+        cleanKode.contains("MEDIUM") -> "Beras Medium" to "25 kg"
+        else -> cleanKode to "25 kg"
     }
 }
 

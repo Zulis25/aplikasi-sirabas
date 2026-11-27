@@ -22,6 +22,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import coil.compose.AsyncImage
 import com.stb.sirabas.R
 import com.stb.sirabas.ui.theme.SIRABASTheme
 import java.math.BigDecimal
@@ -35,7 +36,8 @@ data class ProdukPenjualanUi(
     val satuanJual: String,
     val stokTersedia: Int,
     val hargaKatalog: Long,
-    @DrawableRes val fotoRes: Int? = null
+    @DrawableRes val fotoRes: Int? = null,
+    val fotoUrl: String? = null
 )
 
 @Composable
@@ -98,21 +100,34 @@ fun KartuProdukPenjualan(
                         .padding(5.dp),
                     contentAlignment = Alignment.Center
                 ) {
-                    val foto = produk.fotoRes
+                    val url = produk.fotoUrl
+                    val resId = produk.fotoRes
 
-                    if (foto != null) {
-                        Image(
-                            painter = painterResource(id = foto),
-                            contentDescription = "${produk.nama}, ${produk.kemasan}",
-                            contentScale = ContentScale.Fit,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    } else {
-                        Text(
-                            text = "Foto produk",
-                            color = warna.onSecondaryContainer,
-                            fontSize = 12.sp
-                        )
+                    when {
+                        !url.isNullOrBlank() -> {
+                            AsyncImage(
+                                model = url,
+                                contentDescription = "${produk.nama}, ${produk.kemasan}",
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier.fillMaxSize(),
+                                error = if (resId != null) painterResource(id = resId) else null
+                            )
+                        }
+                        resId != null -> {
+                            Image(
+                                painter = painterResource(id = resId),
+                                contentDescription = "${produk.nama}, ${produk.kemasan}",
+                                contentScale = ContentScale.Fit,
+                                modifier = Modifier.fillMaxSize()
+                            )
+                        }
+                        else -> {
+                            Text(
+                                text = "Foto produk",
+                                color = warna.onSecondaryContainer,
+                                fontSize = 12.sp
+                            )
+                        }
                     }
                 }
 

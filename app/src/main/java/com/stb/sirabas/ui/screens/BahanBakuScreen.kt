@@ -24,11 +24,15 @@ data class BahanBakuUi(
     val supplier: String,
     val asalDaerah: String,
     val beratKg: Double,
+    val sisaKg: Double? = null,
     val kadarAir: Double?,
     val derajatSosoh: Double?,
     val broken: Double?,
     val petugas: String = ""
-)
+) {
+    val sisaLot: Double
+        get() = sisaKg ?: beratKg
+}
 
 @Composable
 fun BahanBakuScreen(

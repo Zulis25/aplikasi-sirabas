@@ -104,9 +104,11 @@ data class ProductionBatchDto(
     val kode_batch: String,
     val tanggal: String? = null,
     val nomor_penerimaan: String? = null,
-    val berat_input_kg: Double? = null,
-    val hasil_utama: List<BatchOutputDto> = emptyList(),
-    val hasil_samping: List<SideOutputDto> = emptyList()
+    val berat_input_kg: Double? = 0.0,
+    val total_hasil_utama_kg: Double? = 0.0,
+    val total_hasil_samping_kg: Double? = 0.0,
+    val hasil_utama: List<BatchOutputDto>? = emptyList(),
+    val hasil_samping: List<SideOutputDto>? = emptyList()
 )
 
 data class LabelsRequest(
@@ -136,12 +138,29 @@ data class InvoiceRequest(
     val items: List<InvoiceItemRequest>
 )
 
+data class ProductionOrderDto(
+    val nomor_invoice: String,
+    val status_pemenuhan: String? = null,
+    val dibuat_pada: String? = null,
+    val tanggal: String? = null,
+    val pelanggan: String? = null,
+    val dibuat_oleh_penjualan: String? = null,
+    val kode_produk: String? = null,
+    val nama_produk: String? = null,
+    val kemasan: String? = null,
+    val jumlah_diminta: Int = 0,
+    val jumlah_dipenuhi: Int = 0,
+    val jumlah_sisa: Int = 0
+)
+
 data class InvoiceItemDto(
     val kode_produk: String? = null,
     val nama_produk: String? = null,
     val kemasan: String? = null,
     val jumlah: Int = 0,
-    val harga_satuan: Long = 0
+    val harga_satuan: Long = 0,
+    val harga: Long? = null,
+    val subtotal: Long? = null
 )
 
 data class InvoicePaymentDto(
@@ -155,6 +174,7 @@ data class InvoiceDto(
     val tanggal: String? = null,
     val pelanggan: String? = null,
     val total: Long? = null,
+    val total_tagihan: Long? = null,
     val jumlah_dibayar: Long = 0,
     val status_pembayaran: String? = null,
     val items: List<InvoiceItemDto> = emptyList(),
@@ -168,6 +188,10 @@ data class PaymentRequest(
 
 data class ShipRequest(
     val kode_karung: List<String>
+)
+
+data class ScanLabelRequest(
+    val kode_karung: String
 )
 
 // --- Trace & Retur DTOs ---

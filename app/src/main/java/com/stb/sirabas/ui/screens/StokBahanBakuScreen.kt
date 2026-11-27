@@ -283,10 +283,10 @@ fun StokBahanBakuScreen(
                             it.tanggal
                         }
                     ) { bahan ->
-                        val sisa = sisaLotKg(
+                        val sisa = bahan.sisaKg ?: sisaLotKg(
                             bahan,
                             batchProduksi
-                        )
+                        ).toDouble()
 
                         AccessCard {
                             Text(
@@ -417,9 +417,6 @@ fun StokBahanBakuScreen(
                                 text = when {
                                     batch.beratInput.signum() <= 0 ->
                                         "Susut belum dapat dihitung: berat bahan belum tersedia."
-
-                                    batch.rincian.hasilUtama.isEmpty() ->
-                                        "Susut belum dapat dihitung: rincian hasil utama belum tersedia."
 
                                     batch.susut.signum() < 0 ->
                                         "Periksa data: total hasil melebihi berat bahan yang dipakai."

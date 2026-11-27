@@ -38,6 +38,15 @@ interface SirabasApi {
     @GET("production/batches")
     suspend fun getProductionBatches(): Response<List<ProductionBatchDto>>
 
+    @GET("production/orders")
+    suspend fun getProductionOrders(): Response<List<ProductionOrderDto>>
+
+    @POST("production/orders/{nomorInvoice}/scan")
+    suspend fun scanOrderLabel(
+        @Path("nomorInvoice") nomorInvoice: String,
+        @Body body: ScanLabelRequest
+    ): Response<Map<String, Any>>
+
     @POST("production/batches")
     suspend fun createProductionBatch(
         @Body body: ProductionRequest
